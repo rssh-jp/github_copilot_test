@@ -95,7 +95,9 @@ fun ScoreManagementApp(
             AllHistoryScreen(
                 allSessions = viewModel.getAllSessionsHistory(),
                 onGetSessionHistory = viewModel::getSessionScoreHistory,
-                onNavigateBack = viewModel::navigateToMainScreen
+                onNavigateBack = viewModel::navigateToMainScreen,
+                onEditSession = viewModel::editFromHistory,
+                onStartNewGame = viewModel::startNewGameFromHistory
             )
         }
     }

@@ -60,7 +60,7 @@ data class ScoreHistory(
  * アプリの状態を表すデータクラス
  */
 data class AppState(
-    val currentStep: AppStep = AppStep.USER_COUNT_INPUT,
+    val currentStep: AppStep = AppStep.HISTORY_VIEW,
     val userCount: Int = 0,
     val currentSession: GameSession? = null,
     val users: List<User> = emptyList(),

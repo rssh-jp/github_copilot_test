@@ -71,6 +71,21 @@ class ScoreViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
+     * 新しいゲームを開始（ユーザー数入力画面に遷移）
+     */
+    fun startNewGameFromHistory() {
+        appState = appState.copy(
+            currentStep = AppStep.USER_COUNT_INPUT,
+            userCount = 0,
+            currentSession = null,
+            users = emptyList()
+        )
+        currentUserName = ""
+        gameScoreInputs = mapOf()
+        currentGameName = ""
+    }
+    
+    /**
      * ユーザー数を設定（新しいセッション開始）
      */
     fun setUserCount(count: Int) {
@@ -264,6 +279,20 @@ class ScoreViewModel(application: Application) : AndroidViewModel(application) {
                 val gameTotal = gameScores.sumOf { it.value }
                 Triple(game, userScorePairs, gameTotal)
             }
+    }
+    
+    /**
+     * 履歴から編集モードに遷移
+     */
+    fun editFromHistory(sessionId: String) {
+        val session = appState.allSessions.find { it.id == sessionId }
+        if (session != null) {
+            appState = appState.copy(
+                currentSession = session,
+                users = session.users,
+                currentStep = AppStep.MAIN_SCREEN
+            )
+        }
     }
     
     /**
