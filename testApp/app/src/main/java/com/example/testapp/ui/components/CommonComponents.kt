@@ -80,7 +80,8 @@ fun CommonScreenLayout(
             .fillMaxSize()
             .padding(horizontal = 16.dp)
             .padding(top = 56.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top
     ) {
         content()
     }

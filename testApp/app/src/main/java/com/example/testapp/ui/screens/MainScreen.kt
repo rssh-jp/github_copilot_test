@@ -3,6 +3,7 @@ package com.example.testapp.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.testapp.data.Game
@@ -273,6 +275,10 @@ private fun GameHistoryCard(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editingScore by remember { mutableStateOf<Score?>(null) }
+    var editingUser by remember { mutableStateOf<User?>(null) }
+    var editScoreText by remember { mutableStateOf("") }
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
     
     Card(
@@ -369,7 +375,12 @@ private fun GameHistoryCard(
                             Spacer(modifier = Modifier.width(8.dp))
                             IconButton(
                                 onClick = { 
-                                    score?.let { s -> onEditScore(s.id, s.value) }
+                                    score?.let { s ->
+                                        editingScore = s
+                                        editingUser = user
+                                        editScoreText = s.value.toString()
+                                        showEditDialog = true
+                                    }
                                 },
                                 modifier = Modifier.size(24.dp)
                             ) {
@@ -404,6 +415,56 @@ private fun GameHistoryCard(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+    
+    // スコア編集ダイアログ
+    if (showEditDialog && editingScore != null && editingUser != null) {
+        AlertDialog(
+            onDismissRequest = { 
+                showEditDialog = false
+                editingScore = null
+                editingUser = null
+            },
+            title = { Text("スコアを編集") },
+            text = {
+                Column {
+                    Text("${editingUser!!.name}さんのスコアを編集")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editScoreText,
+                        onValueChange = { editScoreText = it },
+                        label = { Text("得点") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newScore = editScoreText.toIntOrNull()
+                        if (newScore != null && editingScore != null) {
+                            onEditScore(editingScore!!.id, newScore)
+                        }
+                        showEditDialog = false
+                        editingScore = null
+                        editingUser = null
+                    },
+                    enabled = editScoreText.toIntOrNull() != null
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showEditDialog = false
+                    editingScore = null
+                    editingUser = null
+                }) {
                     Text("キャンセル")
                 }
             }

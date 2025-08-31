@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.testapp.data.User
 import com.example.testapp.ui.components.CommonScreenLayout
+import com.example.testapp.ui.components.CommonHeader
 
 /**
  * ユーザー名入力画面
@@ -32,37 +33,28 @@ fun UserNameInputScreen(
     val isComplete = users.size >= userCount
     
     CommonScreenLayout(modifier = modifier) {
-        Spacer(modifier = Modifier.height(16.dp))
-        
         // ヘッダー
+        CommonHeader(
+            title = "ユーザー名入力",
+            subtitle = "${users.size} / $userCount 人入力完了"
+        )
+        
+        // プログレスインジケーター
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "ユーザー名入力",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { users.size.toFloat() / userCount.toFloat() },
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "${users.size} / $userCount 人入力完了",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }

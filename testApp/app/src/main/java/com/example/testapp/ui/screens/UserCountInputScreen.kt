@@ -11,6 +11,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.testapp.ui.components.CenteredScreenLayout
+import com.example.testapp.ui.components.CommonScreenLayout
+import com.example.testapp.ui.components.CommonHeader
 
 /**
  * ユーザー数入力画面
@@ -23,22 +25,11 @@ fun UserCountInputScreen(
     var userCountText by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     
-    CenteredScreenLayout(modifier = modifier) {
-        // タイトル
-        Text(
-            text = "得点集計アプリ",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        
-        Spacer(modifier = Modifier.height(48.dp))
-        
-        // 説明
-        Text(
-            text = "参加するユーザー数を入力してください",
-            fontSize = 18.sp,
-            color = MaterialTheme.colorScheme.onSurface
+    CommonScreenLayout(modifier = modifier) {
+        // ヘッダー
+        CommonHeader(
+            title = "得点集計アプリ",
+            subtitle = "参加するユーザー数を入力してください"
         )
         
         Spacer(modifier = Modifier.height(32.dp))
