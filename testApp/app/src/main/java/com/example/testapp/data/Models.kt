@@ -12,11 +12,21 @@ data class User(
 )
 
 /**
+ * ゲーム（ラウンド）のデータクラス
+ */
+data class Game(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+/**
  * スコアのデータクラス
  */
 data class Score(
     val id: String = UUID.randomUUID().toString(),
     val userId: String,
+    val gameId: String,
     val value: Int,
     val timestamp: Long = System.currentTimeMillis(),
     val description: String = ""
@@ -38,8 +48,9 @@ data class AppState(
     val currentStep: AppStep = AppStep.USER_COUNT_INPUT,
     val userCount: Int = 0,
     val users: List<User> = emptyList(),
+    val games: List<Game> = emptyList(),
     val scores: List<Score> = emptyList(),
-    val currentUserIndex: Int = 0
+    val currentGameIndex: Int = 0
 )
 
 /**
@@ -48,6 +59,6 @@ data class AppState(
 enum class AppStep {
     USER_COUNT_INPUT,    // ユーザー数入力
     USER_NAME_INPUT,     // ユーザー名入力
-    SCORE_INPUT,         // スコア入力
-    SCORE_HISTORY        // スコア履歴表示
+    MAIN_SCREEN,         // メイン画面（ユーザー一覧とスコア管理）
+    GAME_SCORE_INPUT     // ゲームスコア入力
 }

@@ -57,34 +57,26 @@ fun ScoreManagementApp(
             )
         }
         
-        AppStep.SCORE_INPUT -> {
-            val currentUser = viewModel.getCurrentUser()
-            if (currentUser != null) {
-                ScoreInputScreen(
-                    currentUser = currentUser,
-                    currentUserIndex = appState.currentUserIndex,
-                    totalUsers = appState.users.size,
-                    currentScoreValue = viewModel.currentScoreValue,
-                    currentScoreDescription = viewModel.currentScoreDescription,
-                    onScoreValueChange = viewModel::updateCurrentScoreValue,
-                    onScoreDescriptionChange = viewModel::updateCurrentScoreDescription,
-                    onAddScore = viewModel::addScore,
-                    onPreviousUser = viewModel::previousUser,
-                    onNextUser = viewModel::nextUser,
-                    onNavigateToHistory = viewModel::navigateToScoreHistory,
-                    canGoToPrevious = appState.currentUserIndex > 0,
-                    canGoToNext = appState.currentUserIndex < appState.users.size - 1
-                )
-            }
+        AppStep.MAIN_SCREEN -> {
+            MainScreen(
+                users = appState.users,
+                gameHistory = viewModel.getGameScoreHistory(),
+                onAddGameScore = viewModel::navigateToGameScoreInput,
+                onDeleteGame = viewModel::deleteGame,
+                onEditScore = viewModel::editScore,
+                onResetApp = viewModel::resetApp
+            )
         }
         
-        AppStep.SCORE_HISTORY -> {
-            ScoreHistoryScreen(
-                scoreHistories = viewModel.getScoreHistory(),
-                onDeleteScore = viewModel::deleteScore,
-                onEditScore = viewModel::editScore,
-                onNavigateBack = viewModel::navigateToScoreInput,
-                onResetApp = viewModel::resetApp
+        AppStep.GAME_SCORE_INPUT -> {
+            GameScoreInputScreen(
+                users = appState.users,
+                gameName = viewModel.currentGameName,
+                gameScoreInputs = viewModel.gameScoreInputs,
+                onGameNameChange = viewModel::updateGameName,
+                onScoreInputChange = viewModel::updateGameScoreInput,
+                onSaveScores = viewModel::saveGameScores,
+                onCancel = viewModel::navigateToMainScreen
             )
         }
     }
