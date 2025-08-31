@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.testapp.data.User
+import com.example.testapp.ui.components.CommonScreenLayout
 
 /**
  * ユーザー名入力画面
@@ -30,14 +31,14 @@ fun UserNameInputScreen(
     val currentUserIndex = users.size
     val isComplete = users.size >= userCount
     
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) {
+    CommonScreenLayout(modifier = modifier) {
+        Spacer(modifier = Modifier.height(16.dp))
+        
         // ヘッダー
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
@@ -80,7 +81,9 @@ fun UserNameInputScreen(
                         contentDescription = null
                     )
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             )
             
             Spacer(modifier = Modifier.height(16.dp))
@@ -89,7 +92,9 @@ fun UserNameInputScreen(
             Button(
                 onClick = onAddUser,
                 enabled = currentUserName.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             ) {
                 Text(
                     text = if (currentUserIndex == userCount - 1) "完了" else "次へ",
@@ -114,11 +119,14 @@ fun UserNameInputScreen(
             
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 items(users) { user ->
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surface
                         ),
@@ -126,7 +134,8 @@ fun UserNameInputScreen(
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -149,7 +158,9 @@ fun UserNameInputScreen(
         if (isComplete) {
             Spacer(modifier = Modifier.height(16.dp))
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 )

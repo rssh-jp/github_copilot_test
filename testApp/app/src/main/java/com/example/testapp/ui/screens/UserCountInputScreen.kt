@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.testapp.ui.components.CenteredScreenLayout
 
 /**
  * ユーザー数入力画面
@@ -22,16 +23,10 @@ fun UserCountInputScreen(
     var userCountText by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    CenteredScreenLayout(modifier = modifier) {
         // タイトル
         Text(
-            text = "スコア管理アプリ",
+            text = "得点集計アプリ",
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -61,7 +56,9 @@ fun UserCountInputScreen(
             supportingText = if (isError) {
                 { Text("1以上の数値を入力してください") }
             } else null,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
         )
         
         Spacer(modifier = Modifier.height(32.dp))
@@ -76,7 +73,9 @@ fun UserCountInputScreen(
                     isError = true
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
         ) {
             Text(
                 text = "開始",
@@ -85,17 +84,20 @@ fun UserCountInputScreen(
             )
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         // 注意事項
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
             Column(
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = "ご利用方法",

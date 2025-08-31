@@ -15,6 +15,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.testapp.data.User
+import com.example.testapp.ui.components.CommonHeader
+import com.example.testapp.ui.components.CommonScreenLayout
 
 /**
  * ゲームスコア入力画面
@@ -36,42 +38,16 @@ fun GameScoreInputScreen(
         scoreInput.isNotBlank() && scoreInput.toIntOrNull() != null
     }
     
-    Column(
-        modifier = modifier.fillMaxSize()
-    ) {
+    CommonScreenLayout(modifier = modifier) {
         // ヘッダー
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onCancel) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "戻る",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Text(
-                        text = "ゲームスコア入力",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
+        CommonHeader(
+            title = "得点入力",
+            onBackClick = onCancel
+        )
         
         Column(
             modifier = Modifier
-                .weight(1f)
+                .fillMaxWidth()
                 .padding(16.dp)
         ) {
             // ゲーム名入力
@@ -85,14 +61,16 @@ fun GameScoreInputScreen(
                         contentDescription = null
                     )
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
             )
             
             Spacer(modifier = Modifier.height(24.dp))
             
             // 説明
             Text(
-                text = "各プレイヤーのスコアを入力してください",
+                text = "各プレイヤーの得点を入力してください",
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -102,14 +80,17 @@ fun GameScoreInputScreen(
             // ユーザー毎のスコア入力
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 items(users) { user ->
                     val scoreInput = gameScoreInputs[user.id] ?: ""
                     val isError = scoreInput.isNotBlank() && scoreInput.toIntOrNull() == null
                     
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
@@ -168,7 +149,9 @@ fun GameScoreInputScreen(
             Button(
                 onClick = onSaveScores,
                 enabled = allScoresEntered && gameName.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Save,
@@ -176,7 +159,7 @@ fun GameScoreInputScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "スコアを保存",
+                    text = "得点を保存",
                     fontSize = 16.sp,
                     modifier = Modifier.padding(8.dp)
                 )
@@ -187,7 +170,9 @@ fun GameScoreInputScreen(
             // キャンセルボタン
             OutlinedButton(
                 onClick = onCancel,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
             ) {
                 Text("キャンセル")
             }
@@ -196,14 +181,17 @@ fun GameScoreInputScreen(
             if (!allScoresEntered) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
@@ -213,7 +201,7 @@ fun GameScoreInputScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "全てのプレイヤーのスコアを入力してください",
+                            text = "全てのプレイヤーの得点を入力してください",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

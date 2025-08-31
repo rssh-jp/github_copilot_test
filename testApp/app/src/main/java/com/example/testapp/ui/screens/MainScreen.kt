@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.sp
 import com.example.testapp.data.Game
 import com.example.testapp.data.User
 import com.example.testapp.data.Score
+import com.example.testapp.ui.components.CommonHeader
+import com.example.testapp.ui.components.CommonScreenLayout
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -29,40 +31,46 @@ fun MainScreen(
     onAddGameScore: () -> Unit,
     onDeleteGame: (String) -> Unit,
     onEditScore: (String, Int) -> Unit,
+    onViewHistory: () -> Unit,
     onResetApp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
     
-    Column(
-        modifier = modifier.fillMaxSize()
-    ) {
-        // ヘッダー
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddGameScore,
+                containerColor = MaterialTheme.colorScheme.primary
             ) {
-                Column {
-                    Text(
-                        text = "スコア管理",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        text = "${users.size}人参加中",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "新しい得点を追加",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+    ) { paddingValues ->
+        CommonScreenLayout(
+            modifier = modifier.padding(paddingValues)
+        ) {
+            // ヘッダー
+            CommonHeader(
+                title = "得点集計",
+                subtitle = "${users.size}人参加中"
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // アクションボタン
+            Row {
+                IconButton(onClick = onViewHistory) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "全履歴を見る",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
-                
                 IconButton(onClick = { showResetDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -71,163 +79,186 @@ fun MainScreen(
                     )
                 }
             }
-        }
-        
-        // ユーザー一覧とスコア追加ボタン
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
+            
+            // ユーザー一覧表示
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
             ) {
-                Text(
-                    text = "参加者",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // ユーザーリスト
-                users.forEach { user ->
-                    val totalScore = gameHistory.flatMap { (_, userScores, _) -> 
-                        userScores.filter { it.first.id == user.id && it.second != null }
-                            .mapNotNull { it.second?.value }
-                    }.sum()
-                    
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = user.name,
-                                fontSize = 16.sp
-                            )
-                        }
                         Text(
-                            text = "${totalScore}点",
-                            fontSize = 16.sp,
+                            text = "現在の順位",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "合計得点",
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (users.isNotEmpty()) {
+                        // ユーザー別の合計得点を計算して順位表示
+                        val userScores = users.map { user ->
+                            val totalScore = gameHistory.flatMap { (_, userScores, _) ->
+                                userScores.filter { it.first.id == user.id }
+                                    .mapNotNull { it.second?.value ?: 0 }
+                            }.sum()
+                            user to totalScore
+                        }.sortedByDescending { it.second }
+                        
+                        userScores.forEachIndexed { index, (user, totalScore) ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = if (index == 0) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                                onClick = {
+                                    // ユーザーのスコア詳細画面に遷移する場合はここに処理を追加
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${index + 1}位",
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = user.name,
+                                            fontSize = 16.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Text(
+                                        text = "${totalScore}点",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            if (index < userScores.size - 1) {
+                                HorizontalDivider()
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "参加者がいません",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // ゲーム履歴
+            if (gameHistory.isNotEmpty()) {
+                Text(
+                    text = "ゲーム履歴",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // スコア追加ボタン
-                Button(
-                    onClick = onAddGameScore,
-                    modifier = Modifier.fillMaxWidth()
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    items(gameHistory) { (game, userScores, gameTotal) ->
+                        GameHistoryCard(
+                            game = game,
+                            userScores = userScores,
+                            gameTotal = gameTotal,
+                            onDeleteGame = onDeleteGame,
+                            onEditScore = onEditScore
+                        )
+                    }
+                }
+            } else {
+                // ゲーム履歴がない場合
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null
+                        imageVector = Icons.Default.SportsEsports,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "ゲームスコアを追加",
-                        fontSize = 16.sp
+                        text = "まだゲームが開始されていません",
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "「ゲームスコアを追加」ボタンでスコアを記録しましょう",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
         
-        // ゲーム履歴
-        if (gameHistory.isNotEmpty()) {
-            Text(
-                text = "ゲーム履歴",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-            
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(gameHistory) { (game, userScores, gameTotal) ->
-                    GameHistoryCard(
-                        game = game,
-                        userScores = userScores,
-                        gameTotal = gameTotal,
-                        onDeleteGame = onDeleteGame,
-                        onEditScore = onEditScore
-                    )
-                }
-            }
-        } else {
-            // ゲーム履歴がない場合
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SportsEsports,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "まだゲームが開始されていません",
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "「ゲームスコアを追加」ボタンでスコアを記録しましょう",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-    
-    // リセット確認ダイアログ
-    if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            title = { Text("アプリをリセット") },
-            text = { Text("全てのデータが削除されます。最初からやり直しますか？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onResetApp()
-                        showResetDialog = false
+        // リセット確認ダイアログ
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = { Text("アプリをリセット") },
+                text = { Text("全てのデータが削除されます。最初からやり直しますか？") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onResetApp()
+                            showResetDialog = false
+                        }
+                    ) {
+                        Text("リセット")
                     }
-                ) {
-                    Text("リセット")
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) {
+                        Text("キャンセル")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
-                    Text("キャンセル")
-                }
-            }
-        )
+            )
+        }
     }
 }
 
@@ -251,17 +282,20 @@ private fun GameHistoryCard(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // ゲーム名と合計スコア
+            // ゲーム情報ヘッダー
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
                         text = game.name,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = dateFormat.format(Date(game.timestamp)),
@@ -270,40 +304,83 @@ private fun GameHistoryCard(
                     )
                 }
                 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { showDeleteDialog = true }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "削除",
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    IconButton(
-                        onClick = { isExpanded = !isExpanded }
-                    ) {
-                        Icon(
-                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (isExpanded) "閉じる" else "開く"
-                        )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "合計: ${gameTotal}点",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Row {
+                        IconButton(
+                            onClick = { isExpanded = !isExpanded },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isExpanded) "閉じる" else "展開",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "削除",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
             
-            // 詳細表示
+            // 展開時の詳細表示
             if (isExpanded) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Divider()
-                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
                 
                 userScores.forEach { (user, score) ->
-                    ScoreEditItem(
-                        user = user,
-                        score = score,
-                        onEditScore = onEditScore
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = user.name,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${score?.value ?: 0}点",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { 
+                                    score?.let { s -> onEditScore(s.id, s.value) }
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "編集",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -314,7 +391,7 @@ private fun GameHistoryCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("ゲームを削除") },
-            text = { Text("「${game.name}」のデータを削除しますか？") },
+            text = { Text("「${game.name}」を削除しますか？この操作は取り消せません。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -322,7 +399,7 @@ private fun GameHistoryCard(
                         showDeleteDialog = false
                     }
                 ) {
-                    Text("削除")
+                    Text("削除", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -331,92 +408,5 @@ private fun GameHistoryCard(
                 }
             }
         )
-    }
-}
-
-@Composable
-private fun ScoreEditItem(
-    user: User,
-    score: Score?,
-    onEditScore: (String, Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isEditing by remember { mutableStateOf(false) }
-    var editValue by remember { mutableStateOf(score?.value?.toString() ?: "0") }
-    
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Person,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = user.name,
-                fontSize = 14.sp
-            )
-        }
-        
-        if (isEditing && score != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = editValue,
-                    onValueChange = { editValue = it },
-                    modifier = Modifier.width(80.dp),
-                    singleLine = true
-                )
-                IconButton(
-                    onClick = {
-                        val newValue = editValue.toIntOrNull()
-                        if (newValue != null) {
-                            onEditScore(score.id, newValue)
-                            isEditing = false
-                        }
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "保存",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        isEditing = false
-                        editValue = score.value.toString()
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "キャンセル"
-                    )
-                }
-            }
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "${score?.value ?: 0}点",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                if (score != null) {
-                    IconButton(
-                        onClick = { isEditing = true }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "編集",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
     }
 }
