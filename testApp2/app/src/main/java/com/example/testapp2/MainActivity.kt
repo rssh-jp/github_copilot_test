@@ -66,6 +66,12 @@ class AppState {
     }
 }
 
+// メニュータイプを定義
+enum class MenuType(val title: String) {
+    NEW_SESSION("新しいセッション"),
+    SESSION_LIST("一覧")
+}
+
 // アプリの画面状態を定義
 sealed class Screen {
     object NewSession : Screen()
@@ -91,7 +97,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen() {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val menuItems = listOf("新しいセッション", "一覧")
+    val menuItems = MenuType.values().toList()
     
     // アプリケーション状態を作成・管理
     val appState = remember { AppState() }
@@ -100,15 +106,14 @@ fun MainScreen() {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.SessionList) }
     
     // 初期選択メニューも一覧に合わせる
-    var selectedIndex by remember { mutableStateOf(1) }
+    var selectedMenu by remember { mutableStateOf(MenuType.SESSION_LIST) }
 
     // メニュー選択時に画面状態を更新
-    val onMenuItemSelected: (Int) -> Unit = { index ->
-        selectedIndex = index
-        currentScreen = when (index) {
-            0 -> Screen.NewSession
-            1 -> Screen.SessionList
-            else -> Screen.NewSession
+    val onMenuItemSelected: (MenuType) -> Unit = { menuType ->
+        selectedMenu = menuType
+        currentScreen = when (menuType) {
+            MenuType.NEW_SESSION -> Screen.NewSession
+            MenuType.SESSION_LIST -> Screen.SessionList
         }
         scope.launch { drawerState.close() }
     }
@@ -124,11 +129,11 @@ fun MainScreen() {
             ModalDrawerSheet {
                 Text("メニュー", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                 Divider()
-                menuItems.forEachIndexed { index, item ->
+                menuItems.forEach { menuType ->
                     NavigationDrawerItem(
-                        label = { Text(item) },
-                        selected = selectedIndex == index,
-                        onClick = { onMenuItemSelected(index) }
+                        label = { Text(menuType.title) },
+                        selected = selectedMenu == menuType,
+                        onClick = { onMenuItemSelected(menuType) }
                     )
                 }
             }
@@ -165,7 +170,10 @@ fun MainScreen() {
                         when (currentScreen) {
                             is Screen.SessionDetail -> {
                                 IconButton(onClick = { 
-                                    currentScreen = if (selectedIndex == 0) Screen.NewSession else Screen.SessionList
+                                    currentScreen = when (selectedMenu) {
+                                        MenuType.NEW_SESSION -> Screen.NewSession
+                                        MenuType.SESSION_LIST -> Screen.SessionList
+                                    }
                                 }) {
                                     Text("戻る")
                                 }
@@ -242,6 +250,7 @@ fun NewSessionScreen(
             value = sessionName,
             onValueChange = { sessionName = it },
             label = { Text("セッション名") },
+            placeholder = { Text("新しいセッション名を入力") },
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
         )
         
@@ -287,7 +296,7 @@ fun SessionListScreen(
                 onClick = { 
                     // 新しいセッション画面に遷移する (MainScreenのcurrentScreenを変更する代わりに)
                     // まず新しいセッションを作成してすぐに詳細画面に遷移させる
-                    val session = appState.addSession("新しいセッション ${appState.nextSessionId}")
+                    val session = appState.addSession("")  // 空の名前で作成し、詳細画面で編集可能に
                     onSessionSelected(session.id)
                 }
             ) {
@@ -450,7 +459,7 @@ fun SessionDetailScreen(
                 modifier = Modifier.padding(16.dp)
             ) {
                 // セッション名を編集可能に
-                var sessionNameEditing by remember { mutableStateOf(session?.name ?: "新しいセッション") }
+                var sessionNameEditing by remember { mutableStateOf(session?.name ?: "") }
                 
                 OutlinedTextField(
                     value = sessionNameEditing,
@@ -460,6 +469,7 @@ fun SessionDetailScreen(
                         appState.updateSession(sessionId, sessionNameEditing)
                     },
                     label = { Text("セッション名") },
+                    placeholder = { Text("セッション名を入力") },
                     textStyle = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 )
