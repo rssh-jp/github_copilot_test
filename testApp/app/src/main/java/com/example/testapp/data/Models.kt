@@ -11,7 +11,9 @@ data class GameSession(
     val users: List<User>,
     val startTime: Long = System.currentTimeMillis(),
     val endTime: Long? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val games: List<Game>? = null,
+    val scores: List<Score>? = null
 )
 
 /**
@@ -60,7 +62,7 @@ data class ScoreHistory(
  * アプリの状態を表すデータクラス
  */
 data class AppState(
-    val currentStep: AppStep = AppStep.HISTORY_VIEW,
+    val currentStep: AppStep = AppStep.SESSION_SELECT,
     val userCount: Int = 0,
     val currentSession: GameSession? = null,
     val users: List<User> = emptyList(),
@@ -74,8 +76,10 @@ data class AppState(
  * アプリのステップを表す列挙型
  */
 enum class AppStep {
+    SESSION_SELECT,      // セッション選択（新規作成 or 既存選択）
     USER_COUNT_INPUT,    // ユーザー数入力
     USER_NAME_INPUT,     // ユーザー名入力
+    SESSION_CREATED,     // セッション作成完了
     MAIN_SCREEN,         // メイン画面（ユーザー一覧とスコア管理）
     GAME_SCORE_INPUT,    // ゲームスコア入力
     HISTORY_VIEW         // 全履歴表示

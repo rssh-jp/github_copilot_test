@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Composeプロジェクト用のベーステーマ - 従来のXMLスタイルは使いません -->
+    <style name="Theme.TestApp2" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

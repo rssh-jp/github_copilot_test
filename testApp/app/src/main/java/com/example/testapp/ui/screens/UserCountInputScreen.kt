@@ -1,18 +1,10 @@
 package com.example.testapp.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.testapp.ui.components.CenteredScreenLayout
-import com.example.testapp.ui.components.CommonScreenLayout
-import com.example.testapp.ui.components.CommonHeader
+import com.example.testapp.ui.components.*
 
 /**
  * ユーザー数入力画面
@@ -20,6 +12,7 @@ import com.example.testapp.ui.components.CommonHeader
 @Composable
 fun UserCountInputScreen(
     onUserCountSet: (Int) -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var userCountText by remember { mutableStateOf("") }
@@ -32,30 +25,26 @@ fun UserCountInputScreen(
             subtitle = "参加するユーザー数を入力してください"
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32)
         
         // ユーザー数入力フィールド
-        OutlinedTextField(
+        NumberInputField(
             value = userCountText,
             onValueChange = { newValue ->
                 userCountText = newValue
                 isError = false
             },
-            label = { Text("ユーザー数") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            label = "ユーザー数",
             isError = isError,
-            supportingText = if (isError) {
-                { Text("1以上の数値を入力してください") }
-            } else null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
+            errorMessage = "1以上の数値を入力してください",
+            modifier = Modifier.standardHorizontalPadding()
         )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(32)
         
         // 開始ボタン
-        Button(
+        PrimaryActionButton(
+            text = "開始",
             onClick = {
                 val count = userCountText.toIntOrNull()
                 if (count != null && count > 0) {
@@ -64,49 +53,30 @@ fun UserCountInputScreen(
                     isError = true
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-        ) {
-            Text(
-                text = "開始",
-                fontSize = 16.sp,
-                modifier = Modifier.padding(8.dp)
-            )
-        }
+            modifier = Modifier.standardHorizontalPadding()
+        )
         
-        Spacer(modifier = Modifier.height(32.dp))
+        VerticalSpacer(16)
+        
+        // 戻るボタン
+        onBack?.let { backAction ->
+            SecondaryActionButton(
+                text = "戻る",
+                onClick = backAction,
+                modifier = Modifier.standardHorizontalPadding()
+            )
+            
+            VerticalSpacer(16)
+        }
         
         // 注意事項
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "ご利用方法",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "1. 参加ユーザー数を入力\n" +
-                            "2. 各ユーザーの名前を入力\n" +
-                            "3. ゲームを進めながらスコアを記録\n" +
-                            "4. 履歴から過去のスコアを確認・編集",
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        InfoCard(
+            title = "ご利用方法",
+            content = "1. 参加ユーザー数を入力\n" +
+                    "2. 各ユーザーの名前を入力\n" +
+                    "3. ゲームを進めながらスコアを記録\n" +
+                    "4. 履歴から過去のスコアを確認・編集",
+            modifier = Modifier.standardCardPadding()
+        )
     }
 }

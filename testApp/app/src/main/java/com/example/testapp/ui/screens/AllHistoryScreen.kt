@@ -29,19 +29,93 @@ fun AllHistoryScreen(
     onNavigateBack: () -> Unit,
     onEditSession: (String) -> Unit,
     onStartNewGame: () -> Unit,
+    onStartNewSession: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showFabMenu by remember { mutableStateOf(false) }
+    
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onStartNewGame,
-                containerColor = MaterialTheme.colorScheme.primary
+            Column(
+                horizontalAlignment = Alignment.End
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "新しいゲームを開始",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
+                // 拡張メニューの表示
+                if (showFabMenu) {
+                    // 説明テキスト
+                    Card(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Text(
+                                text = "新しいメンバー：完全に新しいセッション",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "過去のデータ：前回の続きから",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    
+                    // 新しいメンバーでセッション開始
+                    FloatingActionButton(
+                        onClick = {
+                            showFabMenu = false
+                            onStartNewSession()
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GroupAdd,
+                            contentDescription = "新しいメンバーでセッション開始",
+                            tint = MaterialTheme.colorScheme.onSecondary
+                        )
+                    }
+                    
+                    // 過去のデータを読み込んでゲーム開始
+                    FloatingActionButton(
+                        onClick = {
+                            showFabMenu = false
+                            onStartNewGame()
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        containerColor = MaterialTheme.colorScheme.tertiary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "過去のデータでゲーム開始",
+                            tint = MaterialTheme.colorScheme.onTertiary
+                        )
+                    }
+                }
+                
+                // メインFAB
+                FloatingActionButton(
+                    onClick = {
+                        if (allSessions.isEmpty()) {
+                            // 履歴がない場合は直接新しいセッション開始
+                            onStartNewSession()
+                        } else {
+                            // 履歴がある場合はメニューを表示
+                            showFabMenu = !showFabMenu
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = if (showFabMenu) Icons.Default.Close else Icons.Default.Add,
+                        contentDescription = if (showFabMenu) "閉じる" else "新しいゲームを開始",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
         }
     ) { paddingValues ->
@@ -49,7 +123,10 @@ fun AllHistoryScreen(
             // ヘッダー
             CommonHeader(
                 title = "得点集計",
-                subtitle = if (allSessions.isEmpty()) "新しいゲームを開始しましょう" else "過去のセッションを選択"
+                subtitle = if (allSessions.isEmpty()) 
+                    "新しいゲームを開始しましょう" 
+                else 
+                    "過去のセッションを選択するか、右下のボタンから新しいゲームを開始"
             )
             
             if (allSessions.isEmpty()) {

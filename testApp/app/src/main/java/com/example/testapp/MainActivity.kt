@@ -5,15 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.testapp.data.AppStep
-import com.example.testapp.ui.screens.*
 import com.example.testapp.ui.theme.TestAppTheme
-import com.example.testapp.viewmodel.ScoreViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,11 +20,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TestAppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    ScoreManagementApp()
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    ScoreApp(
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }
@@ -33,72 +31,131 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ScoreManagementApp(
-    viewModel: ScoreViewModel = viewModel()
+fun ScoreApp(
+    modifier: Modifier = Modifier
 ) {
-    val appState = viewModel.appState
-    
-    // 起動時にデータ復元確認
-    if (viewModel.hasSavedData() && appState.currentStep == AppStep.USER_COUNT_INPUT && appState.users.isEmpty()) {
-        DataRestoreScreen(
-            onRestoreData = {
-                // データはすでにloadSavedData()で読み込まれているので何もしない
-            },
-            onStartNewGameSession = viewModel::startNewGameSession,
-            onCompleteReset = viewModel::resetApp
-        )
-        return
+    val context = LocalContext.current
+    val dbHelper = ScoreDatabaseHelper(context)
+    val dao = SQLiteDao(dbHelper)
+    val repository = ScoreRepository(dao)
+    val scoreViewModel = viewModel<ScoreViewModel> { 
+        ScoreViewModel(repository) 
     }
     
-    when (appState.currentStep) {
-        AppStep.USER_COUNT_INPUT -> {
-            UserCountInputScreen(
-                onUserCountSet = viewModel::setUserCount
+    // StateFlowの状態を収集
+    val currentScreen by scoreViewModel.currentScreen.collectAsState()
+    val currentSession by scoreViewModel.currentSession.collectAsState()
+    val sessions by scoreViewModel.sessions.collectAsState()
+    val currentSessionUsers by scoreViewModel.currentSessionUsers.collectAsState()
+    val message by scoreViewModel.message.collectAsState()
+    
+    val snackbarHostState = remember { SnackbarHostState() }
+    
+    // メッセージが更新されたときにSnackbarを表示
+    LaunchedEffect(message) {
+        message?.let {
+            snackbarHostState.showSnackbar(it)
+            scoreViewModel.clearMessage()
+        }
+    }
+    
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        modifier = modifier
+    ) { paddingValues ->
+    // 画面状態に応じて適切な画面を表示
+    when (currentScreen) {
+        AppScreen.SESSION_SELECT -> {
+            SessionSelectScreen(
+                availableSessions = sessions,
+                onSelectSession = { session ->
+                    scoreViewModel.navigateToScoreInput(session)
+                },
+                onCreateNewSession = {
+                    scoreViewModel.navigateToSessionCreate()
+                },
+                onViewAllHistory = {
+                    scoreViewModel.navigateToHistory()
+                },
+                onDataRestore = {
+                    // データ復元の処理
+                },
+                modifier = Modifier.padding(paddingValues)
             )
         }
         
-        AppStep.USER_NAME_INPUT -> {
-            UserNameInputScreen(
-                userCount = appState.userCount,
-                users = appState.users,
-                currentUserName = viewModel.currentUserName,
-                onUserNameChange = viewModel::updateCurrentUserName,
-                onAddUser = viewModel::addUser
+        AppScreen.SESSION_CREATE -> {
+            SessionCreationScreen(
+                onCreateSession = { sessionName, userNames ->
+                    scoreViewModel.createNewSession(sessionName, userNames)
+                },
+                onBack = {
+                    scoreViewModel.navigateToSessionSelect()
+                },
+                modifier = Modifier.padding(paddingValues)
             )
         }
         
-        AppStep.MAIN_SCREEN -> {
-            MainScreen(
-                users = appState.users,
-                gameHistory = viewModel.getGameScoreHistory(),
-                onAddGameScore = viewModel::navigateToGameScoreInput,
-                onDeleteGame = viewModel::deleteGame,
-                onEditScore = viewModel::editScore,
-                onViewHistory = viewModel::navigateToHistoryView,
-                onResetApp = viewModel::resetApp
-            )
+        AppScreen.SCORE_INPUT -> {
+            currentSession?.let { session ->
+                if (currentSessionUsers.isEmpty()) {
+                    // ユーザーデータが読み込まれるまでローディング表示
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("ユーザー情報を読み込んでいます...")
+                    }
+                } else {
+                    ScoreInputScreen(
+                        users = currentSessionUsers.map { user ->
+                            DataUser(
+                                id = user.id.toString(),
+                                name = user.name,
+                                totalScore = 0,
+                                gameCount = 0,
+                                averageScore = 0.0
+                            )
+                        },
+                        gameNumber = scoreViewModel.getCurrentGameNumber(),
+                        onScoreSubmit = { userScores ->
+                            // スコア保存の処理
+                            val gameId = scoreViewModel.createGame(session.id)
+                            val scoreList = userScores.mapIndexed { index, score ->
+                                Pair(currentSessionUsers[index].id, score ?: 0)
+                            }
+                            scoreViewModel.saveGameScores(gameId, scoreList)
+                            scoreViewModel.showMessage("スコアを登録しました！")
+                            // スコア保存後にセッション選択画面に戻る
+                            scoreViewModel.navigateToSessionSelect()
+                        },
+                        onCancel = {
+                            scoreViewModel.navigateToSessionSelect()
+                        },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+            }
         }
         
-        AppStep.GAME_SCORE_INPUT -> {
-            GameScoreInputScreen(
-                users = appState.users,
-                gameName = viewModel.currentGameName,
-                gameScoreInputs = viewModel.gameScoreInputs,
-                onGameNameChange = viewModel::updateGameName,
-                onScoreInputChange = viewModel::updateGameScoreInput,
-                onSaveScores = viewModel::saveGameScores,
-                onCancel = viewModel::navigateToMainScreen
-            )
-        }
-        
-        AppStep.HISTORY_VIEW -> {
-            AllHistoryScreen(
-                allSessions = viewModel.getAllSessionsHistory(),
-                onGetSessionHistory = viewModel::getSessionScoreHistory,
-                onNavigateBack = viewModel::navigateToMainScreen,
-                onEditSession = viewModel::editFromHistory,
-                onStartNewGame = viewModel::startNewGameFromHistory
+        AppScreen.HISTORY -> {
+            HistoryScreen(
+                sessions = sessions,
+                onBackToMain = {
+                    scoreViewModel.navigateToSessionSelect()
+                },
+                onEnterSession = { sessionId ->
+                    val session = sessions.find { it.id == sessionId }
+                    session?.let { scoreViewModel.navigateToScoreInput(it) }
+                },
+                modifier = Modifier.padding(paddingValues)
             )
         }
     }
+}
 }

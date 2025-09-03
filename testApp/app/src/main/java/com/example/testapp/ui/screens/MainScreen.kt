@@ -35,6 +35,7 @@ fun MainScreen(
     onEditScore: (String, Int) -> Unit,
     onViewHistory: () -> Unit,
     onResetApp: () -> Unit,
+    onBackToSelect: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showResetDialog by remember { mutableStateOf(false) }
@@ -66,6 +67,15 @@ fun MainScreen(
             
             // アクションボタン
             Row {
+                onBackToSelect?.let { backAction ->
+                    IconButton(onClick = backAction) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "セッション選択に戻る",
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
                 IconButton(onClick = onViewHistory) {
                     Icon(
                         imageVector = Icons.Default.History,

@@ -27,6 +27,7 @@ fun UserNameInputScreen(
     currentUserName: String,
     onUserNameChange: (String) -> Unit,
     onAddUser: () -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val currentUserIndex = users.size
@@ -93,6 +94,22 @@ fun UserNameInputScreen(
                     fontSize = 16.sp,
                     modifier = Modifier.padding(8.dp)
                 )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // 戻るボタン
+            onBack?.let { backAction ->
+                OutlinedButton(
+                    onClick = backAction,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp)
+                ) {
+                    Text("戻る")
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
             }
             
             Spacer(modifier = Modifier.height(24.dp))
