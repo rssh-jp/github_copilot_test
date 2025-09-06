@@ -3,17 +3,27 @@ package com.example.testapp2.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
+import com.example.testapp2.data.ScoreRecord
+import com.example.testapp2.data.User
 import com.example.testapp2.ui.theme.TestApp2Theme
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun SessionRunningScreen(
@@ -25,6 +35,22 @@ fun SessionRunningScreen(
     val users = appState.sessionUsers[sessionId] ?: emptyList()
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
     val startTime = remember { System.currentTimeMillis() }
+    
+    // スコア履歴を表示するかのフラグ
+    var showHistory by remember { mutableStateOf(false) }
+    
+    // ユーザーごとのスコア入力
+    val userScores = remember(users) {
+        mutableStateMapOf<Int, String>().apply {
+            users.forEach { user -> 
+                this[user.id] = user.score.toString()
+            }
+        }
+    }
+    
+    // スコア登録成功時のメッセージ表示
+    var showSuccessMessage by remember { mutableStateOf(false) }
+    var lastScoreId by remember { mutableStateOf<Int?>(null) }
     
     // 時間を更新する効果
     LaunchedEffect(Unit) {
@@ -40,13 +66,13 @@ fun SessionRunningScreen(
     val seconds = elapsedTime % 60
     
     Column(
-        modifier = modifier.padding(16.dp).fillMaxSize()
+        modifier = modifier.padding(16.dp).fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // セッションの基本情報
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 16.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -80,7 +106,7 @@ fun SessionRunningScreen(
             }
         }
         
-        // 参加者リスト
+        // 参加者リストとスコア入力
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -89,19 +115,77 @@ fun SessionRunningScreen(
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = "参加者",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "参加者スコア",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    
+                    Button(
+                        onClick = {
+                            try {
+                                // スコアを数値に変換して保存
+                                val scoreMap = userScores.mapValues { (userId, value) -> 
+                                    val score = value.toIntOrNull() ?: 0
+                                    score
+                                }
+                                val scoreId = appState.addScoreRecord(sessionId, scoreMap)
+                                lastScoreId = scoreId
+                                showSuccessMessage = true
+                                
+                                // スコア登録後に最新のユーザー情報を反映
+                                val updatedUsers = appState.sessionUsers[sessionId] ?: emptyList()
+                                // スコア入力フィールドを初期化 (最新のスコアを表示)
+                                updatedUsers.forEach { user ->
+                                    userScores[user.id] = user.score.toString()
+                                }
+                                
+                                // 3秒後にメッセージを非表示にする
+                                kotlinx.coroutines.MainScope().launch {
+                                    delay(3000)
+                                    showSuccessMessage = false
+                                }
+                            } catch (e: Exception) {
+                                println("スコア登録エラー: ${e.message}")
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "登録")
+                        Spacer(Modifier.width(4.dp))
+                        Text("スコア登録")
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (showSuccessMessage && lastScoreId != null) {
+                        Text(
+                            text = "スコア登録完了（ID: $lastScoreId）",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
                 
-                LazyColumn {
+                Spacer(Modifier.height(8.dp))
+                
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items(users) { user ->
-                        // 参加者情報と得点の入力欄
+                        // 参加者情報とスコア入力欄
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp),
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -110,19 +194,140 @@ fun SessionRunningScreen(
                                 modifier = Modifier.padding(end = 8.dp)
                             )
                             
-                            Text(
-                                text = user.name,
-                                style = MaterialTheme.typography.bodyLarge,
+                            Column(
                                 modifier = Modifier.weight(1f)
-                            )
+                            ) {
+                                Text(
+                                    text = user.name,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "現在スコア: ${user.score}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
                             
-                            // 得点表示
-                            Text(
-                                text = "${user.score}点",
-                                style = MaterialTheme.typography.bodyLarge
+                            // スコア入力欄
+                            OutlinedTextField(
+                                value = userScores[user.id] ?: "0",
+                                onValueChange = { value ->
+                                    // 数字のみ許可
+                                    if (value.isEmpty() || value.all { it.isDigit() }) {
+                                        userScores[user.id] = value
+                                    }
+                                },
+                                label = { Text("新スコア") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.width(100.dp),
+                                singleLine = true
                             )
                         }
                         Divider()
+                    }
+                }
+            }
+        }
+        
+        // スコア履歴表示切り替えボタン
+        OutlinedButton(
+            onClick = { showHistory = !showHistory },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (showHistory) "履歴を閉じる" else "スコア履歴を表示")
+        }
+        
+        // スコア履歴表示部分
+        if (showHistory) {
+            ScoreHistorySection(
+                scoreHistory = appState.getScoreHistory(sessionId),
+                users = users
+            )
+        }
+    }
+}
+
+@Composable
+fun ScoreHistorySection(
+    scoreHistory: List<ScoreRecord>,
+    users: List<User>
+) {
+    val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
+    
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "スコア履歴",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            if (scoreHistory.isEmpty()) {
+                Text("履歴がありません", modifier = Modifier.padding(vertical = 8.dp))
+            } else {
+                // ヘッダー行
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "ID",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(40.dp)
+                    )
+                    
+                    Text(
+                        text = "時刻",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(100.dp)
+                    )
+                    
+                    users.forEach { user ->
+                        Text(
+                            text = user.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                
+                // 履歴データ（最新順）
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(scoreHistory.reversed()) { record ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // スコアID
+                            Text(
+                                text = "#${record.id}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.width(40.dp)
+                            )
+                            
+                            Text(
+                                text = dateFormat.format(record.timestamp),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.width(100.dp)
+                            )
+                            
+                            users.forEach { user ->
+                                Text(
+                                    text = record.scores[user.id]?.toString() ?: "-",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -137,6 +342,13 @@ fun SessionRunningPreview() {
     val session = appState.addSession("テストセッション")
     appState.addUserToSession(session.id, "ユーザー1")
     appState.addUserToSession(session.id, "ユーザー2")
+    
+    // テスト用にスコア履歴を追加
+    val scores1 = mapOf(1 to 10, 2 to 20)
+    val scores2 = mapOf(1 to 15, 2 to 25)
+    val scoreId1 = appState.addScoreRecord(session.id, scores1)
+    val scoreId2 = appState.addScoreRecord(session.id, scores2)
+    println("テスト用スコアID: $scoreId1, $scoreId2")
     
     TestApp2Theme {
         SessionRunningScreen(
