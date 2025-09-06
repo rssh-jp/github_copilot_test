@@ -22,6 +22,7 @@ data class User(
 // スコア履歴を記録するデータクラス
 data class ScoreRecord(
     val id: Int,           // スコアレコードのID
+    val sessionId: Int,
     val timestamp: Date,
     val scores: Map<Int, Int> // ユーザーID -> スコア
 )
@@ -29,8 +30,11 @@ data class ScoreRecord(
 // アプリケーション状態を管理するクラス
 class AppState {
     val sessions = mutableStateListOf<Session>()
-    val sessionUsers = mutableStateMapOf<Int, List<User>>()
+    val users = mutableStateListOf<User>()
+    val scoreRecords = mutableStateListOf<ScoreRecord>()
+
     // セッションごとのスコア履歴を保存
+    val sessionUsers = mutableStateMapOf<Int, List<User>>()
     val sessionScoreHistory = mutableStateMapOf<Int, List<ScoreRecord>>()
     var nextSessionId = 1
     var nextUserId = 1
@@ -46,6 +50,7 @@ class AppState {
 
     fun addUserToSession(sessionId: Int, userName: String): User {
         val user = User(nextUserId++, sessionId, userName)
+        users.add(user)
         val currentUsers = sessionUsers[sessionId] ?: emptyList()
         sessionUsers[sessionId] = currentUsers + user
         return user
@@ -62,7 +67,8 @@ class AppState {
     // スコア記録を追加
     fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
         val scoreId = nextScoreId++
-        val record = ScoreRecord(scoreId, Date(), userScores)
+        val record = ScoreRecord(scoreId, sessionId, Date(), userScores)
+        scoreRecords.add(record)
         val currentHistory = sessionScoreHistory[sessionId] ?: emptyList()
         sessionScoreHistory[sessionId] = currentHistory + record
         

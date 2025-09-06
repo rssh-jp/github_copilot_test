@@ -43,7 +43,7 @@ fun SessionRunningScreen(
     val userScores = remember(users) {
         mutableStateMapOf<Int, String>().apply {
             users.forEach { user -> 
-                this[user.id] = user.score.toString()
+                this[user.id] = "" // 空の文字列で初期化
             }
         }
     }
@@ -67,12 +67,13 @@ fun SessionRunningScreen(
     
     Column(
         modifier = modifier.padding(16.dp).fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally // 親のColumnで中央揃えを追加
     ) {
         // セッションの基本情報
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.8f) // 幅を画面の80%に設定
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -109,7 +110,7 @@ fun SessionRunningScreen(
         // 参加者リストとスコア入力
         Card(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.8f) // 幅を画面の80%に設定
                 .weight(1f)
         ) {
             Column(
@@ -139,9 +140,9 @@ fun SessionRunningScreen(
                                 
                                 // スコア登録後に最新のユーザー情報を反映
                                 val updatedUsers = appState.sessionUsers[sessionId] ?: emptyList()
-                                // スコア入力フィールドを初期化 (最新のスコアを表示)
+                                // スコア入力フィールドを空に初期化
                                 updatedUsers.forEach { user ->
-                                    userScores[user.id] = user.score.toString()
+                                    userScores[user.id] = ""
                                 }
                                 
                                 // 3秒後にメッセージを非表示にする
@@ -201,8 +202,12 @@ fun SessionRunningScreen(
                                     text = user.name,
                                     style = MaterialTheme.typography.bodyLarge
                                 )
+                                // スコア履歴から合計スコアを計算して表示
+                                val totalScore = appState.getScoreHistory(sessionId).sumOf { record ->
+                                    record.scores[user.id] ?: 0
+                                }
                                 Text(
-                                    text = "現在スコア: ${user.score}",
+                                    text = "現在スコア: $totalScore",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
@@ -210,7 +215,7 @@ fun SessionRunningScreen(
                             
                             // スコア入力欄
                             OutlinedTextField(
-                                value = userScores[user.id] ?: "0",
+                                value = userScores[user.id] ?: "",
                                 onValueChange = { value ->
                                     // 数字のみ許可
                                     if (value.isEmpty() || value.all { it.isDigit() }) {
@@ -232,7 +237,7 @@ fun SessionRunningScreen(
         // スコア履歴表示切り替えボタン
         OutlinedButton(
             onClick = { showHistory = !showHistory },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(0.8f) // 幅を画面の80%に設定
         ) {
             Text(if (showHistory) "履歴を閉じる" else "スコア履歴を表示")
         }
@@ -255,7 +260,7 @@ fun ScoreHistorySection(
     val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
     
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(0.8f) // 幅を画面の80%に設定
     ) {
         Column(
             modifier = Modifier.padding(16.dp)

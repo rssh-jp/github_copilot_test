@@ -117,15 +117,6 @@ fun MainScreen() {
                                     Text("戻る")
                                 }
                             }
-                            is Screen.SessionRunning -> {
-                                IconButton(onClick = { 
-                                    // 実行画面から詳細画面に戻る
-                                    val sessionId = (currentScreen as Screen.SessionRunning).sessionId
-                                    currentScreen = Screen.SessionDetail(sessionId)
-                                }) {
-                                    Text("詳細に戻る")
-                                }
-                            }
                             else -> {}
                         }
                     }
