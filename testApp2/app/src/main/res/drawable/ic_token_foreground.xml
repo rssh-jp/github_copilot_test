@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Coin -->
+    <path android:fillColor="#F59E0B" android:pathData="M54,28a26,26 0 1,0 0,52a26,26 0 1,0 0,-52z"/>
+    <path android:fillColor="#FCD34D" android:pathData="M54,32a22,22 0 1,0 0,44a22,22 0 1,0 0,-44z"/>
+    <!-- +1 badge -->
+    <path android:fillColor="#10B981" android:pathData="M66,34h20a6,6 0 0 1 6,6v12a6,6 0 0 1 -6,6H66a6,6 0 0 1 -6,-6V40a6,6 0 0 1 6,-6z"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M73,40h2v12h-2zM69,46h10v2H69zM82,52h2V40h-2z"/>
+    <!-- subtle highlight -->
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.25" android:pathData="M34,42c8,-10 34,-14 44,-8c-20,-2 -28,2 -44,8z"/>
+  </vector>
