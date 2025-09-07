@@ -24,7 +24,7 @@ fun SessionDetailScreen(
     onStartSession: (Int) -> Unit = {}
 ) {
     val session = appState.sessions.find { it.id == sessionId }
-    val users = appState.sessionUsers[sessionId] ?: emptyList()
+    val users = appState.getSessionUsers(sessionId)
     var userName by remember { mutableStateOf("") }
     
     Column(

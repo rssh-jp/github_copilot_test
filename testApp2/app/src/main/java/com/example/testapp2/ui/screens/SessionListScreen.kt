@@ -89,7 +89,7 @@ fun SessionListScreen(
                 items(appState.sessions) { session ->
                     SessionItem(
                         session = session,
-                        users = appState.sessionUsers[session.id] ?: emptyList(),
+                        users = appState.getSessionUsers(session.id),
                         onClick = { onSessionSelected(session.id) }
                     )
                 }

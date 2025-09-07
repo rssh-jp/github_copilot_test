@@ -29,95 +29,118 @@ data class ScoreRecord(
 
 // アプリケーション状態を管理するクラス
 class AppState {
+    // セッション一覧を管理するリスト
     val sessions = mutableStateListOf<Session>()
+    // ユーザー一覧を管理するリスト
     val users = mutableStateListOf<User>()
+    // スコア履歴一覧を管理するリスト
     val scoreRecords = mutableStateListOf<ScoreRecord>()
 
-    // セッションごとのスコア履歴を保存
-    val sessionUsers = mutableStateMapOf<Int, List<User>>()
-    val sessionScoreHistory = mutableStateMapOf<Int, List<ScoreRecord>>()
+    // セッションごとのユーザーを取得する関数
+    fun getSessionUsers(sessionId: Int): List<User> {
+        return users.filter { it.sessionId == sessionId }
+    }
+    
+    // セッションごとのスコア履歴を取得する関数
+    fun getSessionScoreHistory(sessionId: Int): List<ScoreRecord> {
+        return scoreRecords.filter { it.sessionId == sessionId }
+    }
+    // 次に割り当てるセッションID
     var nextSessionId = 1
+    // 次に割り当てるユーザーID
     var nextUserId = 1
+    // 次に割り当てるスコアID
     var nextScoreId = 1
 
+    // セッションの追加
     fun addSession(name: String): Session {
+        // 新しいセッションを作成
         val session = Session(nextSessionId++, name, 0)
+        // セッション一覧に追加
         sessions.add(session)
-        sessionUsers[session.id] = emptyList()
-        sessionScoreHistory[session.id] = emptyList()
         return session
     }
 
+    // セッションにユーザーを追加
     fun addUserToSession(sessionId: Int, userName: String): User {
+        // 新しいユーザーを作成
         val user = User(nextUserId++, sessionId, userName)
+        // ユーザー一覧に追加
         users.add(user)
-        val currentUsers = sessionUsers[sessionId] ?: emptyList()
-        sessionUsers[sessionId] = currentUsers + user
         return user
     }
     
     // セッションの更新
     fun updateSession(sessionId: Int, newName: String) {
+        // 指定されたIDのセッションを検索
         val index = sessions.indexOfFirst { it.id == sessionId }
         if (index >= 0) {
+            // セッション名を更新
             sessions[index] = sessions[index].copy(name = newName)
         }
     }
     
     // スコア記録を追加
     fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
+        // 新しいスコアIDを取得
         val scoreId = nextScoreId++
+        // スコアレコードを作成
         val record = ScoreRecord(scoreId, sessionId, Date(), userScores)
+        // スコア履歴一覧に追加
         scoreRecords.add(record)
-        val currentHistory = sessionScoreHistory[sessionId] ?: emptyList()
-        sessionScoreHistory[sessionId] = currentHistory + record
-        
-        // ユーザーのスコアも更新
-        val updatedUsers = sessionUsers[sessionId]?.map { user ->
-            userScores[user.id]?.let { newScore ->
-                user.copy(score = newScore)
-            } ?: user
-        }
-        updatedUsers?.let { sessionUsers[sessionId] = it }
+        // 合計値を再計算して反映
+        recalcSessionTotals(sessionId)
         
         return scoreId
     }
-    
     // 特定セッションのスコア履歴を取得
-    fun getScoreHistory(sessionId: Int): List<ScoreRecord> {
-        return sessionScoreHistory[sessionId] ?: emptyList()
-    }
+    fun getScoreHistory(sessionId: Int): List<ScoreRecord> =
+        scoreRecords.filter { it.sessionId == sessionId }
     
     // 特定のスコアレコードを取得
     fun getScoreRecord(sessionId: Int, scoreId: Int): ScoreRecord? {
+        // セッションのスコア履歴を取得
         val history = getScoreHistory(sessionId)
+        // 指定されたIDのスコアレコードを検索して返す
         return history.find { it.id == scoreId }
     }
     
     // スコアレコードを編集
     fun updateScoreRecord(sessionId: Int, scoreId: Int, newScores: Map<Int, Int>): Boolean {
-        val history = getScoreHistory(sessionId).toMutableList()
-        val index = history.indexOfFirst { it.id == scoreId }
+        val index = scoreRecords.indexOfFirst { it.sessionId == sessionId && it.id == scoreId }
         if (index == -1) return false
-        
-        // 元のレコードを更新して置き換え
-        val oldRecord = history[index]
-        val updatedRecord = oldRecord.copy(scores = newScores)
-        history[index] = updatedRecord
-        
-        // 更新した履歴をセット
-        sessionScoreHistory[sessionId] = history
+        scoreRecords[index] = scoreRecords[index].copy(scores = newScores)
+        // 合計値を再計算して反映
+        recalcSessionTotals(sessionId)
         return true
     }
     
     // スコアレコードを削除
     fun deleteScoreRecord(sessionId: Int, scoreId: Int): Boolean {
-        val history = getScoreHistory(sessionId).toMutableList()
-        val removed = history.removeIf { it.id == scoreId }
-        if (removed) {
-            sessionScoreHistory[sessionId] = history
-            return true
+        val index = scoreRecords.indexOfFirst { it.sessionId == sessionId && it.id == scoreId }
+        if (index == -1) return false
+        scoreRecords.removeAt(index)
+        // 合計値を再計算して反映
+        recalcSessionTotals(sessionId)
+        return true
+    }
+
+    // 指定セッションのユーザー合計スコアを履歴から再計算して反映
+    private fun recalcSessionTotals(sessionId: Int) {
+        // セッション内の各ユーザーの合計を集計
+        val totals = mutableMapOf<Int, Int>()
+        scoreRecords.filter { it.sessionId == sessionId }
+            .forEach { record ->
+                record.scores.forEach { (userId, delta) ->
+                    totals[userId] = (totals[userId] ?: 0) + delta
+                }
+            }
+        // users リストへ反映（当該セッションのみ）
+        for (i in users.indices) {
+            val u = users[i]
+            if (u.sessionId == sessionId) {
+                users[i] = u.copy(score = totals[u.id] ?: 0)
+            }
         }
-        return false
     }
 }

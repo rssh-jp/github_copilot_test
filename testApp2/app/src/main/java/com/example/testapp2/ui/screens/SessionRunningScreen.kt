@@ -32,7 +32,7 @@ fun SessionRunningScreen(
     sessionId: Int
 ) {
     val session = appState.sessions.find { it.id == sessionId }
-    val users = appState.sessionUsers[sessionId] ?: emptyList()
+    val users = appState.getSessionUsers(sessionId)
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
     val startTime = remember { System.currentTimeMillis() }
     
@@ -147,7 +147,7 @@ fun SessionRunningScreen(
                                     showSuccessMessage = true
 
                                     // スコア登録後に最新のユーザー情報を反映
-                                    val updatedUsers = appState.sessionUsers[sessionId] ?: emptyList()
+                                    val updatedUsers = appState.getSessionUsers(sessionId)
                                     // スコア入力フィールドを空に初期化
                                     updatedUsers.forEach { user ->
                                         userScores[user.id] = ""
