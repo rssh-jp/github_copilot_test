@@ -51,6 +51,8 @@ fun SessionRunningScreen(
     // スコア登録成功時のメッセージ表示
     var showSuccessMessage by remember { mutableStateOf(false) }
     var lastScoreId by remember { mutableStateOf<Int?>(null) }
+    // 情報メッセージ（全員0などの通知）
+    var infoMessage by remember { mutableStateOf<String?>(null) }
     
     // 時間を更新する効果
     LaunchedEffect(Unit) {
@@ -132,21 +134,30 @@ fun SessionRunningScreen(
                                     val score = value.toIntOrNull() ?: 0
                                     score
                                 }
-                                val scoreId = appState.addScoreRecord(sessionId, scoreMap)
-                                lastScoreId = scoreId
-                                showSuccessMessage = true
-                                
-                                // スコア登録後に最新のユーザー情報を反映
-                                val updatedUsers = appState.sessionUsers[sessionId] ?: emptyList()
-                                // スコア入力フィールドを空に初期化
-                                updatedUsers.forEach { user ->
-                                    userScores[user.id] = ""
-                                }
-                                
-                                // 3秒後にメッセージを非表示にする
-                                kotlinx.coroutines.MainScope().launch {
-                                    delay(3000)
-                                    showSuccessMessage = false
+                                // 全員が0なら登録しない
+                                if (scoreMap.values.all { it == 0 }) {
+                                    infoMessage = "全員0のため登録しません"
+                                    kotlinx.coroutines.MainScope().launch {
+                                        delay(2000)
+                                        infoMessage = null
+                                    }
+                                } else {
+                                    val scoreId = appState.addScoreRecord(sessionId, scoreMap)
+                                    lastScoreId = scoreId
+                                    showSuccessMessage = true
+
+                                    // スコア登録後に最新のユーザー情報を反映
+                                    val updatedUsers = appState.sessionUsers[sessionId] ?: emptyList()
+                                    // スコア入力フィールドを空に初期化
+                                    updatedUsers.forEach { user ->
+                                        userScores[user.id] = ""
+                                    }
+
+                                    // 3秒後にメッセージを非表示にする
+                                    kotlinx.coroutines.MainScope().launch {
+                                        delay(3000)
+                                        showSuccessMessage = false
+                                    }
                                 }
                             } catch (e: Exception) {
                                 println("スコア登録エラー: ${e.message}")
@@ -167,6 +178,14 @@ fun SessionRunningScreen(
                         Text(
                             text = "スコア登録完了（ID: $lastScoreId）",
                             color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    if (infoMessage != null) {
+                        Text(
+                            text = infoMessage!!,
+                            color = MaterialTheme.colorScheme.secondary,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 8.dp)
                         )
