@@ -66,17 +66,15 @@ fun SessionRunningScreen(
     val seconds = elapsedTime % 60
     
     Column(
-        modifier = modifier.padding(16.dp).fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally // 親のColumnで中央揃えを追加
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // セッションの基本情報
         Card(
-            modifier = Modifier
-                .fillMaxWidth(0.8f) // 幅を画面の80%に設定
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -110,7 +108,7 @@ fun SessionRunningScreen(
         // 参加者リストとスコア入力
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.8f) // 幅を画面の80%に設定
+                .fillMaxWidth()
                 .weight(1f)
         ) {
             Column(
@@ -237,7 +235,7 @@ fun SessionRunningScreen(
         // スコア履歴表示切り替えボタン
         OutlinedButton(
             onClick = { showHistory = !showHistory },
-            modifier = Modifier.fillMaxWidth(0.8f) // 幅を画面の80%に設定
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text(if (showHistory) "履歴を閉じる" else "スコア履歴を表示")
         }
@@ -260,7 +258,7 @@ fun ScoreHistorySection(
     val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
     
     Card(
-        modifier = Modifier.fillMaxWidth(0.8f) // 幅を画面の80%に設定
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
