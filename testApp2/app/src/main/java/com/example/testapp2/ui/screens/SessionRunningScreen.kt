@@ -22,6 +22,9 @@ import com.example.testapp2.data.ScoreRecord
 import com.example.testapp2.data.User
 import com.example.testapp2.ui.theme.TestApp2Theme
 import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -56,10 +59,10 @@ fun SessionRunningScreen(
     // 情報メッセージ（全員0などの通知）
     var infoMessage by remember { mutableStateOf<String?>(null) }
     
-    // 時間を更新する効果
+    // UI更新用のタイマー（DB保存はライフサイクルに合わせて行う）
     LaunchedEffect(Unit) {
         while(true) {
-            delay(1000) // 1秒ごとに更新
+            delay(1000)
             currentTime = System.currentTimeMillis()
         }
     }
@@ -70,15 +73,34 @@ fun SessionRunningScreen(
     val minutes = (elapsedTimeSec % 3600) / 60
     val seconds = elapsedTimeSec % 60
 
-    // 画面離脱時に経過時間をメモリ/DBへ保存
+    // 画面離脱 or バックグラウンド遷移時に保存
     val scopePersist = rememberCoroutineScope()
-    DisposableEffect(sessionId) {
+    var lastSavedElapsed by remember(sessionId) { mutableStateOf(session?.elapsedTime ?: 0) }
+    // アプリのライフサイクルを監視（ON_STOP/ON_PAUSEで保存）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, sessionId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) {
+                val finalElapsed = baseElapsed + ((System.currentTimeMillis() - enterTime) / 1000).toInt()
+                if (finalElapsed > lastSavedElapsed) {
+                    appState.updateSessionElapsed(sessionId, finalElapsed)
+                    if (db != null) {
+                        scopePersist.launch { appState.persistUpdateSessionElapsed(db, sessionId, finalElapsed) }
+                    }
+                    lastSavedElapsed = finalElapsed
+                }
+            }
+        }
+        val lifecycle = lifecycleOwner.lifecycle
+        lifecycle.addObserver(observer)
         onDispose {
+            lifecycle.removeObserver(observer)
+            // ナビゲーションで画面が破棄される場合にも最終保存
             val finalElapsed = baseElapsed + ((System.currentTimeMillis() - enterTime) / 1000).toInt()
-            appState.updateSessionElapsed(sessionId, finalElapsed)
-            if (db != null) {
-                scopePersist.launch {
-                    appState.persistUpdateSessionElapsed(db, sessionId, finalElapsed)
+            if (finalElapsed > lastSavedElapsed) {
+                appState.updateSessionElapsed(sessionId, finalElapsed)
+                if (db != null) {
+                    scopePersist.launch { appState.persistUpdateSessionElapsed(db, sessionId, finalElapsed) }
                 }
             }
         }

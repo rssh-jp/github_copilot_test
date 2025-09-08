@@ -2,6 +2,8 @@ package com.example.testapp2.data
 
 import androidx.compose.runtime.mutableStateListOf
 import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // セッション情報を保存するデータクラス
 data class Session(
@@ -98,6 +100,16 @@ class AppState {
         return history.find { it.id == scoreId }
     }
 
+    // セッション削除（メモリ）
+    fun deleteSessionLocal(sessionId: Int) {
+        // セッション削除
+        sessions.removeAll { it.id == sessionId }
+        // 関連ユーザー削除
+        users.removeAll { it.sessionId == sessionId }
+        // 関連スコア履歴削除
+        scoreRecords.removeAll { it.sessionId == sessionId }
+    }
+
     // スコアレコードを編集
     fun updateScoreRecord(sessionId: Int, scoreId: Int, newScores: Map<Int, Int>): Boolean {
         val index = scoreRecords.indexOfFirst { it.sessionId == sessionId && it.id == scoreId }
@@ -141,34 +153,31 @@ class AppState {
     // Room I/O (suspend APIs)
     // =====================
     suspend fun loadFromDb(db: com.example.testapp2.data.db.AppDatabase) {
-        sessions.clear()
-        users.clear()
-        scoreRecords.clear()
+        val sessionEntities = withContext(Dispatchers.IO) { db.sessionDao().getAll() }
+        val userEntities = withContext(Dispatchers.IO) { db.userDao().getAll() }
+        val recordEntities = withContext(Dispatchers.IO) { db.scoreDao().getAllRecords() }
+        val items = withContext(Dispatchers.IO) { db.scoreDao().getAllItems() }
 
-        // Load sessions and users
-        val sessionEntities = db.sessionDao().getAll()
+        sessions.clear(); users.clear(); scoreRecords.clear()
+
         sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
-
-        val userEntities = db.userDao().getAll()
         users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
 
-        // Load score records and items -> reconstruct ScoreRecord(scores map)
-        val recordEntities = db.scoreDao().getAllRecords()
-        val items = db.scoreDao().getAllItems()
         val itemsByRecord = items.groupBy { it.recordId }
         scoreRecords.addAll(recordEntities.map { rec ->
             val map = itemsByRecord[rec.id]?.associate { it.userId to it.delta } ?: emptyMap()
             ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map)
         })
 
-        // Make sure totals reflect history
         sessions.map { it.id }.forEach { recalcSessionTotals(it) }
     }
 
     suspend fun persistNewSession(db: com.example.testapp2.data.db.AppDatabase, session: Session): Int {
-        val newId = db.sessionDao().insert(
-            com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
-        ).toInt()
+        val newId = withContext(Dispatchers.IO) {
+            db.sessionDao().insert(
+                com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
+            ).toInt()
+        }
         // Reflect generated ID in memory
         val idx = sessions.indexOfFirst { it === session }
         if (idx >= 0) sessions[idx] = session.copy(id = newId)
@@ -176,28 +185,39 @@ class AppState {
     }
 
     suspend fun persistNewUser(db: com.example.testapp2.data.db.AppDatabase, user: User) {
-        val newId = db.userDao().insert(
-            com.example.testapp2.data.db.UserEntity(sessionId = user.sessionId, name = user.name, score = user.score)
-        ).toInt()
+        val newId = withContext(Dispatchers.IO) {
+            db.userDao().insert(
+                com.example.testapp2.data.db.UserEntity(sessionId = user.sessionId, name = user.name, score = user.score)
+            ).toInt()
+        }
         val idx = users.indexOfFirst { it === user }
         if (idx >= 0) users[idx] = user.copy(id = newId)
     }
 
     suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long) {
-        db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+        withContext(Dispatchers.IO) {
+            db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+        }
     }
 
     suspend fun persistSessionTotals(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
-        users.filter { it.sessionId == sessionId }.forEach { u ->
-            db.userDao().updateScore(u.id, u.score)
+        withContext(Dispatchers.IO) {
+            users.filter { it.sessionId == sessionId }.forEach { u ->
+                db.userDao().updateScore(u.id, u.score)
+            }
         }
     }
 
     suspend fun persistUpdateSessionName(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, name: String) {
-        db.sessionDao().updateName(sessionId, name)
+        withContext(Dispatchers.IO) { db.sessionDao().updateName(sessionId, name) }
     }
 
     suspend fun persistUpdateSessionElapsed(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, elapsedSeconds: Int) {
-        db.sessionDao().updateElapsed(sessionId, elapsedSeconds)
+        withContext(Dispatchers.IO) { db.sessionDao().updateElapsed(sessionId, elapsedSeconds) }
+    }
+
+    suspend fun deleteSession(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
+        withContext(Dispatchers.IO) { db.sessionDao().deleteById(sessionId) }
+        deleteSessionLocal(sessionId)
     }
 }

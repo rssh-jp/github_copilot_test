@@ -62,7 +62,6 @@ fun MainScreen() {
     val onMenuItemSelected: (MenuType) -> Unit = { menuType ->
         selectedMenu = menuType
         currentScreen = when (menuType) {
-            MenuType.NEW_SESSION -> Screen.NewSession
             MenuType.SESSION_LIST -> Screen.SessionList
         }
         scope.launch { drawerState.close() }
@@ -95,7 +94,6 @@ fun MainScreen() {
                     title = {
                         Text(
                             when (currentScreen) {
-                                is Screen.NewSession -> "新しいセッション"
                                 is Screen.SessionList -> "セッション一覧"
                                 is Screen.SessionDetail -> {
                                     val sessionId = (currentScreen as Screen.SessionDetail).sessionId
@@ -118,12 +116,9 @@ fun MainScreen() {
                     // セッション詳細画面/実行画面の場合は戻るボタンを表示
                     actions = {
                         when (currentScreen) {
-                            is Screen.SessionDetail -> {
+                is Screen.SessionDetail -> {
                                 IconButton(onClick = { 
-                                    currentScreen = when (selectedMenu) {
-                                        MenuType.NEW_SESSION -> Screen.NewSession
-                                        MenuType.SESSION_LIST -> Screen.SessionList
-                                    }
+                    currentScreen = Screen.SessionList
                                 }) {
                                     Text("戻る")
                                 }
@@ -141,12 +136,6 @@ fun MainScreen() {
                     CircularProgressIndicator()
                 }
             } else when (currentScreen) {
-                is Screen.NewSession -> NewSessionScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    appState = appState,
-                    db = db,
-                    onSessionCreated = navigateToSessionDetail
-                )
                 is Screen.SessionList -> SessionListScreen(
                     modifier = Modifier.padding(innerPadding),
                     appState = appState,

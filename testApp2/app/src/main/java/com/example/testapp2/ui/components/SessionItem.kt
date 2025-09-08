@@ -3,6 +3,8 @@ package com.example.testapp2.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,7 +17,8 @@ import com.example.testapp2.data.User
 fun SessionItem(
     session: Session, 
     users: List<User>,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onDelete: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     
@@ -38,10 +41,17 @@ fun SessionItem(
                     style = MaterialTheme.typography.titleMedium
                 )
                 
-                Text(
-                    text = "参加者: ${users.size}名",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "参加者: ${users.size}名",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (onDelete != null) {
+                        IconButton(onClick = { onDelete() }) {
+                            Icon(Icons.Default.Delete, contentDescription = "削除")
+                        }
+                    }
+                }
             }
             
             TextButton(onClick = { expanded = !expanded }) {

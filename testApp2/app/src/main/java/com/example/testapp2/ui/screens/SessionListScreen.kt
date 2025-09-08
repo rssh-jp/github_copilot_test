@@ -27,6 +27,7 @@ fun SessionListScreen(
     Column(
         modifier = modifier.padding(16.dp).fillMaxSize()
     ) {
+    var confirmDeleteId by remember { mutableStateOf<Int?>(null) }
         // ヘッダー部分（タイトルと新規セッション作成ボタン）
         Row(
             modifier = Modifier
@@ -100,10 +101,33 @@ fun SessionListScreen(
                     SessionItem(
                         session = session,
                         users = appState.getSessionUsers(session.id),
-                        onClick = { onSessionSelected(session.id) }
+                        onClick = { onSessionSelected(session.id) },
+                        onDelete = { confirmDeleteId = session.id }
                     )
                 }
             }
+        }
+
+        // 削除確認ダイアログ
+        val scope = rememberCoroutineScope()
+        if (confirmDeleteId != null) {
+            AlertDialog(
+                onDismissRequest = { confirmDeleteId = null },
+                title = { Text("セッションを削除") },
+                text = { Text("このセッションと関連データを削除します。よろしいですか？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val id = confirmDeleteId!!
+                        if (db != null) {
+                            scope.launch { appState.deleteSession(db, id) }
+                        } else {
+                            appState.deleteSessionLocal(id)
+                        }
+                        confirmDeleteId = null
+                    }) { Text("削除") }
+                },
+                dismissButton = { TextButton(onClick = { confirmDeleteId = null }) { Text("キャンセル") } }
+            )
         }
     }
 }
