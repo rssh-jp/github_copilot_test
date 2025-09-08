@@ -45,17 +45,13 @@ class AppState {
     fun getSessionScoreHistory(sessionId: Int): List<ScoreRecord> {
         return scoreRecords.filter { it.sessionId == sessionId }
     }
-    // 次に割り当てるセッションID
-    var nextSessionId = 1
-    // 次に割り当てるユーザーID
-    var nextUserId = 1
-    // 次に割り当てるスコアID
-    var nextScoreId = 1
+    // ID採番は常に現在の最大ID+1を使う（状態を持たない）
 
     // セッションの追加
     fun addSession(name: String): Session {
         // 新しいセッションを作成
-        val session = Session(nextSessionId++, name, 0)
+    val nextId = (sessions.maxOfOrNull { it.id } ?: 0) + 1
+    val session = Session(nextId, name, 0)
         // セッション一覧に追加
         sessions.add(session)
         return session
@@ -64,7 +60,8 @@ class AppState {
     // セッションにユーザーを追加
     fun addUserToSession(sessionId: Int, userName: String): User {
         // 新しいユーザーを作成
-        val user = User(nextUserId++, sessionId, userName)
+    val nextId = (users.maxOfOrNull { it.id } ?: 0) + 1
+    val user = User(nextId, sessionId, userName)
         // ユーザー一覧に追加
         users.add(user)
         return user
@@ -83,7 +80,7 @@ class AppState {
     // スコア記録を追加
     fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
         // 新しいスコアIDを取得
-        val scoreId = nextScoreId++
+    val scoreId = (scoreRecords.maxOfOrNull { it.id } ?: 0) + 1
         // スコアレコードを作成
         val record = ScoreRecord(scoreId, sessionId, Date(), userScores)
         // スコア履歴一覧に追加
