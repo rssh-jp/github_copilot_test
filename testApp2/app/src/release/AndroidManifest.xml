@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- Allow profiling on release via shell (Android 10+, Perfetto/System Trace) -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+    </application>
+
+    <!-- NOTE: Do not ship to Play with profileable=true unless you intend to allow profiling. -->
+</manifest>

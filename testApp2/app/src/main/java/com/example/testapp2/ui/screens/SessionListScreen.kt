@@ -24,10 +24,11 @@ fun SessionListScreen(
     db: com.example.testapp2.data.db.AppDatabase? = null,
     onSessionSelected: (Int) -> Unit
 ) {
+    var confirmDeleteId by remember { mutableStateOf<Int?>(null) }
+    
     Column(
         modifier = modifier.padding(16.dp).fillMaxSize()
     ) {
-    var confirmDeleteId by remember { mutableStateOf<Int?>(null) }
         // ヘッダー部分（タイトルと新規セッション作成ボタン）
         Row(
             modifier = Modifier
@@ -42,20 +43,10 @@ fun SessionListScreen(
             )
             
             // 新しいセッション作成ボタン
-            val scope = rememberCoroutineScope()
             Button(
                 onClick = { 
-                    // 新しいセッション画面に遷移する (MainScreenのcurrentScreenを変更する代わりに)
-                    // まず新しいセッションを作成してすぐに詳細画面に遷移させる
-                    val session = appState.addSession("")  // 空の名前で作成し、詳細画面で編集可能に
-                    if (db != null) {
-                        scope.launch {
-                            val newId = appState.persistNewSession(db, session)
-                            onSessionSelected(newId)
-                        }
-                    } else {
-                        onSessionSelected(session.id)
-                    }
+                    // 一時的なセッションIDとして-1を使用（まだDB未登録）
+                    onSessionSelected(-1)
                 }
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
