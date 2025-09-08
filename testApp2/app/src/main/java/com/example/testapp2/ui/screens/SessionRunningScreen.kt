@@ -35,7 +35,8 @@ fun SessionRunningScreen(
     val session = appState.sessions.find { it.id == sessionId }
     val users = appState.getSessionUsers(sessionId)
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
-    val startTime = remember { System.currentTimeMillis() }
+    // 画面入場時刻（同一sessionIdで固定）
+    val enterTime = remember(sessionId) { System.currentTimeMillis() }
     
     // スコア履歴を表示するかのフラグ
     var showHistory by remember { mutableStateOf(false) }
@@ -63,10 +64,25 @@ fun SessionRunningScreen(
         }
     }
     
-    val elapsedTime = (currentTime - startTime) / 1000 // 経過時間（秒）
-    val hours = elapsedTime / 3600
-    val minutes = (elapsedTime % 3600) / 60
-    val seconds = elapsedTime % 60
+    val baseElapsed = session?.elapsedTime ?: 0
+    val elapsedTimeSec = baseElapsed + ((currentTime - enterTime) / 1000).toInt() // 経過時間（秒）
+    val hours = elapsedTimeSec / 3600
+    val minutes = (elapsedTimeSec % 3600) / 60
+    val seconds = elapsedTimeSec % 60
+
+    // 画面離脱時に経過時間をメモリ/DBへ保存
+    val scopePersist = rememberCoroutineScope()
+    DisposableEffect(sessionId) {
+        onDispose {
+            val finalElapsed = baseElapsed + ((System.currentTimeMillis() - enterTime) / 1000).toInt()
+            appState.updateSessionElapsed(sessionId, finalElapsed)
+            if (db != null) {
+                scopePersist.launch {
+                    appState.persistUpdateSessionElapsed(db, sessionId, finalElapsed)
+                }
+            }
+        }
+    }
     
     Column(
         modifier = modifier.fillMaxSize(),

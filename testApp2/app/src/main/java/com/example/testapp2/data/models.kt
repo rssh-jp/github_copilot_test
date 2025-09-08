@@ -69,6 +69,14 @@ class AppState {
         }
     }
 
+    // セッションの経過時間を更新（秒）
+    fun updateSessionElapsed(sessionId: Int, elapsedSeconds: Int) {
+        val index = sessions.indexOfFirst { it.id == sessionId }
+        if (index >= 0) {
+            sessions[index] = sessions[index].copy(elapsedTime = elapsedSeconds)
+        }
+    }
+
     // スコア記録を追加
     fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
         val scoreId = (scoreRecords.maxOfOrNull { it.id } ?: 0) + 1
@@ -187,5 +195,9 @@ class AppState {
 
     suspend fun persistUpdateSessionName(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, name: String) {
         db.sessionDao().updateName(sessionId, name)
+    }
+
+    suspend fun persistUpdateSessionElapsed(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, elapsedSeconds: Int) {
+        db.sessionDao().updateElapsed(sessionId, elapsedSeconds)
     }
 }
