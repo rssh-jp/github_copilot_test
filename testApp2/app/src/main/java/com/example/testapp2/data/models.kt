@@ -5,14 +5,25 @@ import java.util.Date
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// セッション情報を保存するデータクラス
+/**
+ * セッション情報を表すデータクラス
+ * @param id セッションの一意識別子
+ * @param name セッション名
+ * @param elapsedTime セッション実行の累積経過時間（秒）
+ */
 data class Session(
     val id: Int,
     val name: String,
     val elapsedTime: Int,
 )
 
-// ユーザー情報を保存するデータクラス
+/**
+ * セッション参加ユーザー情報を表すデータクラス
+ * @param id ユーザーの一意識別子
+ * @param sessionId 所属するセッションのID
+ * @param name ユーザー名
+ * @param score 現在の累積スコア（履歴から計算される）
+ */
 data class User(
     val id: Int,
     val sessionId: Int,
@@ -20,34 +31,83 @@ data class User(
     val score: Int = 0,
 )
 
-// スコア履歴を記録するデータクラス
+/**
+ * スコア登録履歴を記録するデータクラス
+ * @param id スコアレコードの一意識別子
+ * @param sessionId 対象セッションのID
+ * @param timestamp 記録日時
+ * @param scores ユーザーID -> そのラウンドでの得点のマップ
+ */
 data class ScoreRecord(
-    val id: Int, // スコアレコードのID
+    val id: Int,
     val sessionId: Int,
     val timestamp: Date,
-    val scores: Map<Int, Int>, // ユーザーID -> スコア
+    val scores: Map<Int, Int>,
 )
 
-// アプリケーション状態を管理するクラス
+/**
+ * アプリケーションの状態を管理するクラス
+ * - セッション、ユーザー、スコア履歴をメモリ上で管理
+ * - Room データベースとの同期機能を提供
+ * - ユーザーの累積スコアを履歴から自動計算
+ */
 class AppState {
-    // セッション一覧
+    /** セッション一覧（アプリ起動時にDBから読み込み） */
     val sessions = mutableStateListOf<Session>()
-    // ユーザー一覧
+    /** ユーザー一覧（各セッションの参加者） */
     val users = mutableStateListOf<User>()
-    // スコア履歴一覧
+    /** スコア登録履歴一覧（ゲームの記録） */
     val scoreRecords = mutableStateListOf<ScoreRecord>()
 
-    // セッションごとのユーザー取得
+    // =====================
+    // 基本的なデータ取得メソッド
+    // =====================
+
+    /**
+     * 指定セッションに参加しているユーザー一覧を取得
+     * @param sessionId セッションID
+     * @return そのセッションのユーザーリスト
+     */
     fun getSessionUsers(sessionId: Int): List<User> {
         return users.filter { it.sessionId == sessionId }
     }
 
-    // セッションごとのスコア履歴取得
+    /**
+     * 指定セッションのスコア履歴を取得
+     * @param sessionId セッションID
+     * @return そのセッションのスコア記録リスト
+     */
     fun getSessionScoreHistory(sessionId: Int): List<ScoreRecord> {
         return scoreRecords.filter { it.sessionId == sessionId }
     }
 
-    // セッションの追加
+    /**
+     * 指定セッションのスコア履歴を取得（getSessionScoreHistoryのエイリアス）
+     */
+    fun getScoreHistory(sessionId: Int): List<ScoreRecord> {
+        return scoreRecords.filter { it.sessionId == sessionId }
+    }
+
+    /**
+     * 特定のスコアレコードを取得
+     * @param sessionId セッションID
+     * @param scoreId スコアレコードID
+     * @return 該当するスコアレコード、見つからない場合はnull
+     */
+    fun getScoreRecord(sessionId: Int, scoreId: Int): ScoreRecord? {
+        val history = getScoreHistory(sessionId)
+        return history.find { it.id == scoreId }
+    }
+
+    // =====================
+    // データ変更メソッド（メモリ操作）
+    // =====================
+
+    /**
+     * 新しいセッションを追加
+     * @param name セッション名
+     * @return 作成されたセッションオブジェクト
+     */
     fun addSession(name: String): Session {
         val nextId = (sessions.maxOfOrNull { it.id } ?: 0) + 1
         val session = Session(nextId, name, 0)
@@ -55,7 +115,12 @@ class AppState {
         return session
     }
 
-    // セッションにユーザーを追加
+    /**
+     * セッションにユーザーを追加
+     * @param sessionId 対象セッションID
+     * @param userName ユーザー名
+     * @return 作成されたユーザーオブジェクト
+     */
     fun addUserToSession(sessionId: Int, userName: String): User {
         val nextId = (users.maxOfOrNull { it.id } ?: 0) + 1
         val user = User(nextId, sessionId, userName)
@@ -63,7 +128,11 @@ class AppState {
         return user
     }
 
-    // セッションの更新
+    /**
+     * セッション名を更新
+     * @param sessionId 対象セッションID
+     * @param newName 新しいセッション名
+     */
     fun updateSession(sessionId: Int, newName: String) {
         val index = sessions.indexOfFirst { it.id == sessionId }
         if (index >= 0) {
@@ -71,7 +140,11 @@ class AppState {
         }
     }
 
-    // セッションの経過時間を更新（秒）
+    /**
+     * セッションの経過時間を更新
+     * @param sessionId 対象セッションID
+     * @param elapsedSeconds 累積経過時間（秒）
+     */
     fun updateSessionElapsed(sessionId: Int, elapsedSeconds: Int) {
         val index = sessions.indexOfFirst { it.id == sessionId }
         if (index >= 0) {
@@ -79,7 +152,12 @@ class AppState {
         }
     }
 
-    // スコア記録を追加
+    /**
+     * スコア記録を追加し、ユーザーの累積スコアを再計算
+     * @param sessionId 対象セッションID
+     * @param userScores ユーザーID -> そのラウンドの得点のマップ
+     * @return 作成されたスコアレコードのID
+     */
     fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
         val scoreId = (scoreRecords.maxOfOrNull { it.id } ?: 0) + 1
         val record = ScoreRecord(scoreId, sessionId, Date(), userScores)
@@ -89,18 +167,10 @@ class AppState {
         return scoreId
     }
 
-    // 特定セッションのスコア履歴を取得
-    fun getScoreHistory(sessionId: Int): List<ScoreRecord> {
-        return scoreRecords.filter { it.sessionId == sessionId }
-    }
-
-    // 特定のスコアレコードを取得
-    fun getScoreRecord(sessionId: Int, scoreId: Int): ScoreRecord? {
-        val history = getScoreHistory(sessionId)
-        return history.find { it.id == scoreId }
-    }
-
-    // セッション削除（メモリ）
+    /**
+     * セッションをメモリから削除（関連データも含む）
+     * @param sessionId 削除対象セッションID
+     */
     fun deleteSessionLocal(sessionId: Int) {
         // セッション削除
         sessions.removeAll { it.id == sessionId }
@@ -110,7 +180,13 @@ class AppState {
         scoreRecords.removeAll { it.sessionId == sessionId }
     }
 
-    // スコアレコードを編集
+    /**
+     * スコアレコードを編集
+     * @param sessionId 対象セッションID
+     * @param scoreId 編集対象のスコアレコードID
+     * @param newScores 新しいスコアマップ
+     * @return 編集成功時true、レコードが見つからない場合false
+     */
     fun updateScoreRecord(sessionId: Int, scoreId: Int, newScores: Map<Int, Int>): Boolean {
         val index = scoreRecords.indexOfFirst { it.sessionId == sessionId && it.id == scoreId }
         if (index == -1) return false
@@ -120,7 +196,12 @@ class AppState {
         return true
     }
 
-    // スコアレコードを削除
+    /**
+     * スコアレコードを削除
+     * @param sessionId 対象セッションID
+     * @param scoreId 削除対象のスコアレコードID
+     * @return 削除成功時true、レコードが見つからない場合false
+     */
     fun deleteScoreRecord(sessionId: Int, scoreId: Int): Boolean {
         val index = scoreRecords.indexOfFirst { it.sessionId == sessionId && it.id == scoreId }
         if (index == -1) return false
@@ -130,7 +211,11 @@ class AppState {
         return true
     }
 
-    // 指定セッションのユーザー合計スコアを履歴から再計算して反映
+    /**
+     * 指定セッションのユーザー累積スコアを履歴から再計算
+     * スコア記録の追加/編集/削除時に自動的に呼ばれる
+     * @param sessionId 対象セッションID
+     */
     private fun recalcSessionTotals(sessionId: Int) {
         val totals = mutableMapOf<Int, Int>()
         scoreRecords
@@ -150,8 +235,14 @@ class AppState {
     }
 
     // =====================
-    // Room I/O (suspend APIs)
+    // Room データベース連携（永続化）
     // =====================
+
+    /**
+     * データベースから全データを読み込んでメモリ状態を初期化
+     * アプリ起動時に呼ばれる
+     * @param db Room データベースインスタンス
+     */
     suspend fun loadFromDb(db: com.example.testapp2.data.db.AppDatabase) {
         val sessionEntities = withContext(Dispatchers.IO) { db.sessionDao().getAll() }
         val userEntities = withContext(Dispatchers.IO) { db.userDao().getAll() }
@@ -172,6 +263,12 @@ class AppState {
         sessions.map { it.id }.forEach { recalcSessionTotals(it) }
     }
 
+    /**
+     * 新しいセッションをデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param session 保存対象のセッション
+     * @return データベースで生成されたID
+     */
     suspend fun persistNewSession(db: com.example.testapp2.data.db.AppDatabase, session: Session): Int {
         val newId = withContext(Dispatchers.IO) {
             db.sessionDao().insert(
@@ -184,6 +281,11 @@ class AppState {
         return newId
     }
 
+    /**
+     * 新しいユーザーをデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param user 保存対象のユーザー
+     */
     suspend fun persistNewUser(db: com.example.testapp2.data.db.AppDatabase, user: User) {
         val newId = withContext(Dispatchers.IO) {
             db.userDao().insert(
@@ -194,12 +296,25 @@ class AppState {
         if (idx >= 0) users[idx] = user.copy(id = newId)
     }
 
+    /**
+     * 新しいスコア記録をデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param sessionId 対象セッションID
+     * @param recordId スコアレコードID
+     * @param userScores ユーザースコアマップ
+     * @param timestamp 記録時刻（ミリ秒）
+     */
     suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long) {
         withContext(Dispatchers.IO) {
             db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
         }
     }
 
+    /**
+     * セッションのユーザー累積スコアをデータベースに同期
+     * @param db Room データベースインスタンス
+     * @param sessionId 対象セッションID
+     */
     suspend fun persistSessionTotals(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
         withContext(Dispatchers.IO) {
             users.filter { it.sessionId == sessionId }.forEach { u ->
@@ -208,14 +323,32 @@ class AppState {
         }
     }
 
+    /**
+     * セッション名をデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param sessionId 対象セッションID
+     * @param name 新しいセッション名
+     */
     suspend fun persistUpdateSessionName(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, name: String) {
         withContext(Dispatchers.IO) { db.sessionDao().updateName(sessionId, name) }
     }
 
+    /**
+     * セッションの経過時間をデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param sessionId 対象セッションID
+     * @param elapsedSeconds 累積経過時間（秒）
+     */
     suspend fun persistUpdateSessionElapsed(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, elapsedSeconds: Int) {
         withContext(Dispatchers.IO) { db.sessionDao().updateElapsed(sessionId, elapsedSeconds) }
     }
 
+    /**
+     * セッションをデータベースとメモリの両方から削除
+     * 外部キー制約により関連データ（ユーザー、スコア記録）も連鎖削除される
+     * @param db Room データベースインスタンス
+     * @param sessionId 削除対象セッションID
+     */
     suspend fun deleteSession(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
         withContext(Dispatchers.IO) { db.sessionDao().deleteById(sessionId) }
         deleteSessionLocal(sessionId)
