@@ -9,14 +9,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
 import com.example.testapp2.ui.theme.TestApp2Theme
+import kotlinx.coroutines.launch
 
 @Composable
 fun NewSessionScreen(
     modifier: Modifier = Modifier, 
     appState: AppState,
+    db: com.example.testapp2.data.db.AppDatabase? = null,
     onSessionCreated: (Int) -> Unit
 ) {
     var sessionName by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier.padding(16.dp).fillMaxSize(),
@@ -41,8 +44,15 @@ fun NewSessionScreen(
             onClick = {
                 if (sessionName.isNotBlank()) {
                     val session = appState.addSession(sessionName)
-                    // セッション詳細画面に遷移
-                    onSessionCreated(session.id)
+                    if (db != null) {
+                        scope.launch {
+                            val newId = appState.persistNewSession(db, session)
+                            onSessionCreated(newId)
+                        }
+                    } else {
+                        // セッション詳細画面に遷移
+                        onSessionCreated(session.id)
+                    }
                 }
             },
             modifier = Modifier.padding(vertical = 16.dp)

@@ -128,4 +128,64 @@ class AppState {
             }
         }
     }
+
+    // =====================
+    // Room I/O (suspend APIs)
+    // =====================
+    suspend fun loadFromDb(db: com.example.testapp2.data.db.AppDatabase) {
+        sessions.clear()
+        users.clear()
+        scoreRecords.clear()
+
+        // Load sessions and users
+        val sessionEntities = db.sessionDao().getAll()
+        sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
+
+        val userEntities = db.userDao().getAll()
+        users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
+
+        // Load score records and items -> reconstruct ScoreRecord(scores map)
+        val recordEntities = db.scoreDao().getAllRecords()
+        val items = db.scoreDao().getAllItems()
+        val itemsByRecord = items.groupBy { it.recordId }
+        scoreRecords.addAll(recordEntities.map { rec ->
+            val map = itemsByRecord[rec.id]?.associate { it.userId to it.delta } ?: emptyMap()
+            ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map)
+        })
+
+        // Make sure totals reflect history
+        sessions.map { it.id }.forEach { recalcSessionTotals(it) }
+    }
+
+    suspend fun persistNewSession(db: com.example.testapp2.data.db.AppDatabase, session: Session): Int {
+        val newId = db.sessionDao().insert(
+            com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
+        ).toInt()
+        // Reflect generated ID in memory
+        val idx = sessions.indexOfFirst { it === session }
+        if (idx >= 0) sessions[idx] = session.copy(id = newId)
+        return newId
+    }
+
+    suspend fun persistNewUser(db: com.example.testapp2.data.db.AppDatabase, user: User) {
+        val newId = db.userDao().insert(
+            com.example.testapp2.data.db.UserEntity(sessionId = user.sessionId, name = user.name, score = user.score)
+        ).toInt()
+        val idx = users.indexOfFirst { it === user }
+        if (idx >= 0) users[idx] = user.copy(id = newId)
+    }
+
+    suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long) {
+        db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+    }
+
+    suspend fun persistSessionTotals(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
+        users.filter { it.sessionId == sessionId }.forEach { u ->
+            db.userDao().updateScore(u.id, u.score)
+        }
+    }
+
+    suspend fun persistUpdateSessionName(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, name: String) {
+        db.sessionDao().updateName(sessionId, name)
+    }
 }

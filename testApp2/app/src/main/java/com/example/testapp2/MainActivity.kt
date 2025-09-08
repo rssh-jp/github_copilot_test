@@ -5,19 +5,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
 import com.example.testapp2.data.MenuType
 import com.example.testapp2.data.Screen
+import com.example.testapp2.data.db.AppDatabase
 import com.example.testapp2.ui.screens.*
 import com.example.testapp2.ui.theme.TestApp2Theme
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +44,13 @@ fun MainScreen() {
     
     // アプリケーション状態を作成・管理
     val appState = remember { AppState() }
+    val context = LocalContext.current
+    val db = remember { AppDatabase.get(context) }
+    var isLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        appState.loadFromDb(db)
+        isLoaded = true
+    }
     
     // 現在の画面状態 - 初期値を一覧画面に変更
     var currentScreen by remember { mutableStateOf<Screen>(Screen.SessionList) }
@@ -124,15 +135,22 @@ fun MainScreen() {
             },
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
-            when (currentScreen) {
+            if (!isLoaded) {
+                // 初回ロード中インジケーター
+                Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else when (currentScreen) {
                 is Screen.NewSession -> NewSessionScreen(
                     modifier = Modifier.padding(innerPadding),
                     appState = appState,
+                    db = db,
                     onSessionCreated = navigateToSessionDetail
                 )
                 is Screen.SessionList -> SessionListScreen(
                     modifier = Modifier.padding(innerPadding),
                     appState = appState,
+                    db = db,
                     onSessionSelected = navigateToSessionDetail
                 )
                 is Screen.SessionDetail -> {
@@ -140,6 +158,7 @@ fun MainScreen() {
                     SessionDetailScreen(
                         modifier = Modifier.padding(innerPadding),
                         appState = appState,
+                        db = db,
                         sessionId = sessionId,
                         onStartSession = { sid -> currentScreen = Screen.SessionRunning(sid) }
                     )
@@ -149,6 +168,7 @@ fun MainScreen() {
                     SessionRunningScreen(
                         modifier = Modifier.padding(innerPadding),
                         appState = appState,
+                        db = db,
                         sessionId = sessionId
                     )
                 }

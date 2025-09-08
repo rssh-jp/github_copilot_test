@@ -29,6 +29,7 @@ import java.util.*
 fun SessionRunningScreen(
     modifier: Modifier = Modifier,
     appState: AppState,
+    db: com.example.testapp2.data.db.AppDatabase? = null,
     sessionId: Int
 ) {
     val session = appState.sessions.find { it.id == sessionId }
@@ -126,6 +127,7 @@ fun SessionRunningScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                     
+                    val scope = rememberCoroutineScope()
                     Button(
                         onClick = {
                             try {
@@ -142,8 +144,16 @@ fun SessionRunningScreen(
                                         infoMessage = null
                                     }
                                 } else {
-                                    val scoreId = appState.addScoreRecord(sessionId, scoreMap)
+                    val scoreId = appState.addScoreRecord(sessionId, scoreMap)
                                     lastScoreId = scoreId
+                    if (db != null) {
+                                        val ts = System.currentTimeMillis()
+                                        scope.launch {
+                        appState.persistNewScoreRecord(db, sessionId, scoreId, scoreMap, ts)
+                        // 合計値も同期
+                        appState.persistSessionTotals(db, sessionId)
+                                        }
+                                    }
                                     showSuccessMessage = true
 
                                     // スコア登録後に最新のユーザー情報を反映

@@ -15,11 +15,13 @@ import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
 import com.example.testapp2.ui.components.UserItem
 import com.example.testapp2.ui.theme.TestApp2Theme
+import kotlinx.coroutines.launch
 
 @Composable
 fun SessionDetailScreen(
     modifier: Modifier = Modifier,
     appState: AppState,
+    db: com.example.testapp2.data.db.AppDatabase? = null,
     sessionId: Int,
     onStartSession: (Int) -> Unit = {}
 ) {
@@ -42,12 +44,16 @@ fun SessionDetailScreen(
                 // セッション名を編集可能に
                 var sessionNameEditing by remember { mutableStateOf(session?.name ?: "") }
                 
+                val scopeName = rememberCoroutineScope()
                 OutlinedTextField(
                     value = sessionNameEditing,
                     onValueChange = { 
                         sessionNameEditing = it
                         // 新しいupdateSessionメソッドを使用
                         appState.updateSession(sessionId, sessionNameEditing)
+                        if (db != null) {
+                            scopeName.launch { appState.persistUpdateSessionName(db, sessionId, sessionNameEditing) }
+                        }
                     },
                     label = { Text("セッション名") },
                     placeholder = { Text("セッション名を入力") },
@@ -121,10 +127,14 @@ fun SessionDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
                 
+                val scope = rememberCoroutineScope()
                 Button(
                     onClick = {
                         if (userName.isNotBlank()) {
-                            appState.addUserToSession(sessionId, userName)
+                            val user = appState.addUserToSession(sessionId, userName)
+                            if (db != null) {
+                                scope.launch { appState.persistNewUser(db, user) }
+                            }
                             userName = ""
                         }
                     },
