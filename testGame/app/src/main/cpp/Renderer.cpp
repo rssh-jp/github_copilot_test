@@ -185,16 +185,39 @@ void Renderer::render() {
             
             // ユニット2と3が生きている場合のみ自動戦闘処理を実行
             if (unit2->isAlive() && unit3->isAlive()) {
-                // 両方のユニットがすでに戦闘中の場合は位置を固定
-                if (unit2->inCombat() && unit3->inCombat()) {
-                    // 何もしない - 既に戦闘中なので位置を変更しない
-                    return;
-                }
-                
                 // ユニット間のベクトルを計算
                 float dx = unit3->getX() - unit2->getX();
                 float dy = unit3->getY() - unit2->getY();
                 float distance = std::sqrt(dx * dx + dy * dy);
+                
+                // 両方のユニットがすでに戦闘中の場合は攻撃を継続
+                if (unit2->inCombat() && unit3->inCombat()) {
+                    // 距離が離れすぎた場合は戦闘解除
+                    if (distance > Unit::getCollisionRadius() * 2.5f) {
+                        unit2->setInCombat(false);
+                        unit3->setInCombat(false);
+                        aout << "Units moved too far apart, ending combat" << std::endl;
+                    } else {
+                        // どちらかが死んだら戦闘終了
+                        if (!unit2->isAlive() || !unit3->isAlive()) {
+                            unit2->setInCombat(false);
+                            unit3->setInCombat(false);
+                            aout << "Combat ended - one unit defeated" << std::endl;
+                        } else {
+                            // 戦闘継続 - 攻撃処理を実行
+                            
+                            // ユニット2がユニット3を攻撃
+                            if (unit2->canAttack()) {
+                                unit2->attack(unit3);
+                            }
+                            // ユニット3がユニット2を攻撃
+                            if (unit3->canAttack()) {
+                                unit3->attack(unit2);
+                            }
+                        }
+                    }
+                    return;
+                }
                 
                 // 適切な戦闘距離（衝突半径の2倍＋少し余裕）
                 float combatDistance = Unit::getCollisionRadius() * 2.0f + 0.05f;
@@ -217,20 +240,20 @@ void Renderer::render() {
                     // 両方のユニットの位置を明確に設定して、衝突を確実にする
                     float halfDistance = Unit::getCollisionRadius() * 0.9f; // 少し近づける
                     
-                    // ユニット2とユニット3を明確に接触する位置に再配置
-                    float midX = (unit2->getX() + unit3->getX()) / 2.0f;
-                    float midY = (unit2->getY() + unit3->getY()) / 2.0f;
+                    // ユニット2とユニット3の位置は変更しない（固定位置を維持）
+                    // float midX = (unit2->getX() + unit3->getX()) / 2.0f;
+                    // float midY = (unit2->getY() + unit3->getY()) / 2.0f;
                     
-                    unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
-                    unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
+                    // unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
+                    // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
                     
                     // 戦闘状態を設定（移動停止）
                     unit2->setInCombat(true);
                     unit3->setInCombat(true);
                     
-                    // 目標位置をクリア（移動を完全に停止）
-                    unit2->setTargetPosition(unit2->getX(), unit2->getY());
-                    unit3->setTargetPosition(unit3->getX(), unit3->getY());
+                    // 目標位置は設定しない（固定位置を維持）
+                    // unit2->setTargetPosition(unit2->getX(), unit2->getY());
+                    // unit3->setTargetPosition(unit3->getX(), unit3->getY());
                 } 
                 // まだ戦闘中でなく、距離が十分ではない場合は移動を続ける
                 else if (!unit2->inCombat() && !unit3->inCombat()) {
@@ -244,36 +267,35 @@ void Renderer::render() {
                         
                         // 距離によって異なる処理を行う
                         if (distance > combatDistance * 1.2f) {
-                            // ユニット2とユニット3が確実に衝突するように目標位置を設定
-                            // 相手ユニットの位置自体を目標にする
-                            float targetX2 = unit3->getX();
-                            float targetY2 = unit3->getY();
-                            unit2->setTargetPosition(targetX2, targetY2);
+                            // ユニット2とユニット3は移動させない（固定位置を維持）
+                            // float targetX2 = unit3->getX();
+                            // float targetY2 = unit3->getY();
+                            // unit2->setTargetPosition(targetX2, targetY2);
                             
-                            float targetX3 = unit2->getX();
-                            float targetY3 = unit2->getY();
-                            unit3->setTargetPosition(targetX3, targetY3);
+                            // float targetX3 = unit2->getX();
+                            // float targetY3 = unit2->getY();
+                            // unit3->setTargetPosition(targetX3, targetY3);
                             
                             aout << "Units moving directly towards each other, distance: " << distance << std::endl;
                         } else {
                             // 距離が適切になったら戦闘状態に設定し、位置を固定
                             
-                            // 両方のユニットの位置を適切な距離に再配置して固定
-                            float halfDistance = combatDistance / 2.0f;
-                            float midX = (unit2->getX() + unit3->getX()) / 2.0f;
-                            float midY = (unit2->getY() + unit3->getY()) / 2.0f;
+                            // ユニット2とユニット3の位置は変更しない（固定位置を維持）
+                            // float halfDistance = combatDistance / 2.0f;
+                            // float midX = (unit2->getX() + unit3->getX()) / 2.0f;
+                            // float midY = (unit2->getY() + unit3->getY()) / 2.0f;
                             
                             // 中心点から適切な距離に配置
-                            unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
-                            unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
+                            // unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
+                            // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
                             
                             // 戦闘状態に設定
                             unit2->setInCombat(true);
                             unit3->setInCombat(true);
                             
-                            // 目標位置をクリア（移動を完全に停止）
-                            unit2->setTargetPosition(unit2->getX(), unit2->getY());
-                            unit3->setTargetPosition(unit3->getX(), unit3->getY());
+                            // 目標位置は設定しない（固定位置を維持）
+                            // unit2->setTargetPosition(unit2->getX(), unit2->getY());
+                            // unit3->setTargetPosition(unit3->getX(), unit3->getY());
                             
                             aout << "Units reached combat distance, stopping movement and adjusting positions" << std::endl;
                         }
@@ -285,6 +307,44 @@ void Renderer::render() {
                         // 戦闘状態に設定
                         unit2->setInCombat(true);
                         unit3->setInCombat(true);
+                    }
+                }
+            }
+        }
+        
+        // 射程ベースの戦闘システム - 全ユニットペアをチェック
+        for (size_t i = 0; i < units_.size(); ++i) {
+            for (size_t j = i + 1; j < units_.size(); ++j) {
+                auto& unit1 = units_[i];
+                auto& unit2 = units_[j];
+                
+                // 両方のユニットが生きている場合のみチェック
+                if (unit1->isAlive() && unit2->isAlive()) {
+                    // ユニット間の距離を計算
+                    float dx = unit2->getX() - unit1->getX();
+                    float dy = unit2->getY() - unit1->getY();
+                    float distance = std::sqrt(dx * dx + dy * dy);
+                    
+                    // 射程内チェック（どちらかのユニットの射程内に入っている場合）
+                    bool unit1InRange = distance <= unit1->getAttackRange();
+                    bool unit2InRange = distance <= unit2->getAttackRange();
+                    
+                    if (unit1InRange || unit2InRange) {
+                        aout << "Units " << unit1->getName() << " and " << unit2->getName() 
+                             << " in combat range (distance: " << distance << ")" << std::endl;
+                        
+                        // 射程内にいるユニットが攻撃
+                        if (unit1InRange && unit1->canAttack()) {
+                            aout << unit1->getName() << " attacking " << unit2->getName() 
+                                 << " (range: " << unit1->getAttackRange() << ")" << std::endl;
+                            unit1->attack(unit2);
+                        }
+                        
+                        if (unit2InRange && unit2->canAttack()) {
+                            aout << unit2->getName() << " attacking " << unit1->getName() 
+                                 << " (range: " << unit2->getAttackRange() << ")" << std::endl;
+                            unit2->attack(unit1);
+                        }
                     }
                 }
             }
@@ -482,14 +542,14 @@ void Renderer::createModels() {
     unitRenderer_ = std::make_unique<UnitRenderer>(nullptr);
     
     // テスト用にいくつかのユニットを作成（異なる色と移動速度、戦闘パラメータを設定）
-    // name, id, x, y, speed, maxHP, minAttack, maxAttack, defense, attackSpeed
-    auto unit1 = std::make_shared<Unit>("RedUnit", 1, 0.0f, 0.5f, 1.0f, 
-                                       150, 5, 10, 2, 0.8f);  // 高火力・高HP・遅め赤ユニット
-    // ユニット2と3を適切な距離に配置し、より安定した戦闘が行えるようにする
-    auto unit2 = std::make_shared<Unit>("BlueUnit", 2, -1.5f, 0.0f, 0.6f, 
-                                       100, 3, 7, 5, 1.0f);  // 中火力・高防御青ユニット
-    auto unit3 = std::make_shared<Unit>("GreenUnit", 3, 1.5f, 0.0f, 0.5f, 
-                                       80, 2, 5, 1, 2.0f);   // 低火力・高速攻撃緑ユニット
+    // name, id, x, y, speed, maxHP, minAttack, maxAttack, defense, attackSpeed, attackRange
+    auto unit1 = std::make_shared<Unit>("RedUnit", 1, 0.0f, 2.0f, 1.0f, 
+                                       150, 5, 10, 2, 0.8f, 0.8f);  // 高火力・高HP・遅め赤ユニット（中射程）
+    // ユニット2と3を離れた位置から開始してお互いに向かって移動させる
+    auto unit2 = std::make_shared<Unit>("BlueUnit", 2, -1.0f, 0.0f, 0.6f, 
+                                       100, 3, 7, 5, 1.0f, 0.4f);  // 中火力・高防御青ユニット（短射程）
+    auto unit3 = std::make_shared<Unit>("GreenUnit", 3, 1.0f, 0.0f, 0.5f, 
+                                       80, 2, 5, 1, 2.0f, 1.2f);   // 低火力・高速攻撃緑ユニット（長射程）
     
     // ユニットをリストに追加
     units_.push_back(unit1);
@@ -501,9 +561,9 @@ void Renderer::createModels() {
     unitRenderer_->registerUnitWithColor(unit2, 0.3f, 0.3f, 1.0f); // 明るい青
     unitRenderer_->registerUnitWithColor(unit3, 0.3f, 1.0f, 0.3f); // 明るい緑
     
-    // ユニット2と3をより近い位置に再配置して、戦闘が確実に始まるようにする
-    unit2->setPosition(-0.5f, 0.0f);  // より近くに配置
-    unit3->setPosition(0.5f, 0.0f);   // より近くに配置
+    // ユニット2と3は初期位置に固定（移動しない）
+    // unit2->setTargetPosition(0.0f, 0.0f);   // ユニット2は右（中央）に向かって移動
+    // unit3->setTargetPosition(0.0f, 0.0f);   // ユニット3は左（中央）に向かって移動
     
     // 現在の距離を計算
     float dx = unit3->getX() - unit2->getX();
@@ -522,14 +582,14 @@ void Renderer::createModels() {
     float dirX = dx / distance;
     float dirY = dy / distance;
     
-    // ユニット2とユニット3が直接ぶつかるように目標位置を設定
-    unit2->setTargetPosition(unit3->getX() - dirX * (Unit::getCollisionRadius() * 1.8f), unit3->getY() - dirY * (Unit::getCollisionRadius() * 1.8f));
-    unit3->setTargetPosition(unit2->getX() + dirX * (Unit::getCollisionRadius() * 1.8f), unit2->getY() + dirY * (Unit::getCollisionRadius() * 1.8f));
+    // ユニット2とユニット3は移動させない（初期位置に固定）
+    // unit2->setTargetPosition(unit3->getX() - dirX * (Unit::getCollisionRadius() * 1.8f), unit3->getY() - dirY * (Unit::getCollisionRadius() * 1.8f));
+    // unit3->setTargetPosition(unit2->getX() + dirX * (Unit::getCollisionRadius() * 1.8f), unit2->getY() + dirY * (Unit::getCollisionRadius() * 1.8f));
     
-    aout << "Units initialized to move towards each other (distance: " << distance << ")" << std::endl;
+    aout << "Units initialized at fixed positions (distance: " << distance << ")" << std::endl;
     
     aout << "Created " << units_.size() << " units" << std::endl;
-    aout << "Unit2 and Unit3 will automatically move towards each other and fight" << std::endl;
+    aout << "Unit2 and Unit3 are fixed at their initial positions" << std::endl;
 }
 
 void Renderer::handleInput() {
@@ -677,32 +737,13 @@ void Renderer::moveUnitToPosition(float x, float y) {
         }
     }
     
-    // ユニットをタップした場合は、そのユニットだけ移動
-    // それ以外の場合は、すべてのユニットを移動（分散して移動するよう調整）
-    if (tappedUnit) {
-        // 選択されたユニットのみを移動
-        tappedUnit->setTargetPosition(x, y);
-        aout << "Moving selected unit " << tappedUnit->getName() 
-             << " to position (" << x << ", " << y << ")" << std::endl;
-    } else {
-        // すべてのユニットを同じ場所に移動すると重なるため、
-        // 少しずつずらした場所に移動するよう調整
-        // ユニットサイズが小さくなったので、分散半径も小さくする
-        const float SPREAD_RADIUS = 0.25f;
-        int unitCount = static_cast<int>(units_.size());
-        
-        for (int i = 0; i < unitCount; ++i) {
-            // ユニット数に応じて円周上に配置
-            float angle = (2.0f * M_PI * i) / unitCount;
-            float offsetX = SPREAD_RADIUS * std::cos(angle);
-            float offsetY = SPREAD_RADIUS * std::sin(angle);
-            
-            float targetX = x + offsetX;
-            float targetY = y + offsetY;
-            
-            units_[i]->setTargetPosition(targetX, targetY);
-            aout << "Moving " << units_[i]->getName() << " to position (" 
-                 << targetX << ", " << targetY << ")" << std::endl;
+    // ユニット1（RedUnit）のみをタッチで移動させる
+    if (!units_.empty()) {
+        auto unit1 = units_[0];  // ユニット1は最初の要素
+        if (unit1->getName() == "RedUnit") {
+            // ユニット1をタッチした位置に移動
+            unit1->setTargetPosition(x, y);
+            aout << "Moving Unit1 (RedUnit) to position (" << x << ", " << y << ")" << std::endl;
         }
     }
 }

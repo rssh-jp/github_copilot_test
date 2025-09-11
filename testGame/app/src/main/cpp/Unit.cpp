@@ -1,10 +1,9 @@
-
 #include "Unit.h"
 #include "AndroidOut.h"
 #include <cmath>
 
 Unit::Unit(const std::string& name, int id, float x, float y, float speed,
-           int maxHP, int minAttack, int maxAttack, int defense, float attackSpeed)
+           int maxHP, int minAttack, int maxAttack, int defense, float attackSpeed, float attackRange)
     : name_(name)
     , id_(id)
     , x_(x)
@@ -23,7 +22,8 @@ Unit::Unit(const std::string& name, int id, float x, float y, float speed,
     , maxAttack_(maxAttack)
     , defense_(defense)
     , attackSpeed_(attackSpeed)
-    , attackCooldown_(0.0f) {
+    , attackCooldown_(0.0f)
+    , attackRange_(attackRange) {
     
     // 新しいユニットが作成されたことをログに記録
     aout << "Unit created: " << name_ << " (ID: " << id_ << ") at position (" 
@@ -31,7 +31,8 @@ Unit::Unit(const std::string& name, int id, float x, float y, float speed,
     aout << "Combat stats - HP: " << currentHP_ << "/" << maxHP_ 
          << ", Attack: " << minAttack_ << "-" << maxAttack_ 
          << ", Defense: " << defense_ 
-         << ", Attack Speed: " << attackSpeed_ << "/sec" << std::endl;
+         << ", Attack Speed: " << attackSpeed_ << "/sec"
+         << ", Attack Range: " << attackRange_ << std::endl;
 }
 
 Unit::~Unit() {

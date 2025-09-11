@@ -24,10 +24,11 @@ public:
  * @param maxAttack 最大攻撃力
  * @param defense 防御力
  * @param attackSpeed 攻撃速度（回/秒）
+ * @param attackRange 攻撃射程
  */
 Unit(const std::string& name, int id, float x, float y, float speed,
      int maxHP = 100, int minAttack = 1, int maxAttack = 6, 
-     int defense = 0, float attackSpeed = 1.0f);    /**
+     int defense = 0, float attackSpeed = 1.0f, float attackRange = 0.5f);    /**
      * @brief デストラクタ
      */
     virtual ~Unit();
@@ -113,6 +114,13 @@ Unit(const std::string& name, int id, float x, float y, float speed,
      * @param newSpeed 新しい移動速度
      */
     void setSpeed(float newSpeed) { speed_ = newSpeed; }
+    
+    /**
+     * @brief ユニットの攻撃射程を取得する
+     * 
+     * @return 攻撃射程
+     */
+    float getAttackRange() const { return attackRange_; }
     
     /**
      * @brief 現在衝突中かどうかを取得する
@@ -268,6 +276,7 @@ private:
     int defense_;      ///< 防御力
     float attackSpeed_; ///< 攻撃速度（回/秒）
     float attackCooldown_; ///< 次の攻撃までのクールダウン時間
+    float attackRange_; ///< 攻撃射程
     
     // 衝突回避のための設定
     // ユニットの見た目のサイズに近い値（余裕を持たせる）
