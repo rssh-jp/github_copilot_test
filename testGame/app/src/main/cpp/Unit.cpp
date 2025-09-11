@@ -53,8 +53,8 @@ void Unit::update(float deltaTime) {
         return;
     }
     
-    // ユニットが戦闘中の場合は位置を固定し、移動処理をスキップ
-    if (inCombat_) {
+    // ユニット1（RedUnit）以外は戦闘中の場合は位置を固定し、移動処理をスキップ
+    if (inCombat_ && name_ != "RedUnit") {
         // 戦闘中は位置を変更しない
         isBlocked_ = false; // 衝突フラグをリセット
         return;
@@ -278,10 +278,15 @@ void Unit::setPosition(float x, float y) {
 }
 
 void Unit::setTargetPosition(float x, float y) {
-    // 戦闘中は目標位置を設定しない（その場に留まる）
-    if (inCombat_) {
+    // ユニット1（RedUnit）は戦闘中でも移動可能、他のユニットは戦闘中は移動不可
+    if (inCombat_ && name_ != "RedUnit") {
         aout << name_ << " is in combat and cannot move to new target position" << std::endl;
         return;
+    }
+    
+    // ユニット1の場合は戦闘中でも移動可能であることをログに記録
+    if (inCombat_ && name_ == "RedUnit") {
+        aout << name_ << " is in combat but can still move to new target position (player controlled)" << std::endl;
     }
     
     targetX_ = x;
