@@ -173,7 +173,7 @@ void UnitRenderer::updateUnits(float deltaTime) {
         // ユニットが生きていて攻撃可能な場合
         if (unit->isAlive() && unit->canAttack()) {
             // 戦闘中か衝突中の場合は優先的に攻撃
-            if (unit->inCombat() || unit->isColliding()) {
+            if (unit->getState() == UnitState::COMBAT || unit->isColliding()) {
                 auto target = unit->findTargetToAttack(unitList);
                 if (target) {
                     int damage = unit->attack(target);
@@ -194,8 +194,15 @@ void UnitRenderer::updateUnits(float deltaTime) {
     }
     
     // ユニットの更新（移動や状態更新）
+    // 全ユニットのリストを作成
+    std::vector<std::shared_ptr<Unit>> allUnits;
+    for (const auto& pair : units_) {
+        allUnits.push_back(pair.second);
+    }
+    
+    // 衝突予測機能付きでユニットを更新
     for (auto& pair : units_) {
-        pair.second->update(deltaTime);
+        pair.second->update(deltaTime, allUnits);
     }
 }
 

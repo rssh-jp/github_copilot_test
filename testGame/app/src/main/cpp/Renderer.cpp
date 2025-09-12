@@ -191,17 +191,17 @@ void Renderer::render() {
                 float distance = std::sqrt(dx * dx + dy * dy);
                 
                 // 両方のユニットがすでに戦闘中の場合は攻撃を継続
-                if (unit2->inCombat() && unit3->inCombat()) {
+                if (unit2->getState() == UnitState::COMBAT && unit3->getState() == UnitState::COMBAT) {
                     // 距離が離れすぎた場合は戦闘解除
                     if (distance > Unit::getCollisionRadius() * 2.5f) {
-                        unit2->setInCombat(false);
-                        unit3->setInCombat(false);
+                        unit2->setState(UnitState::IDLE);
+                        unit3->setState(UnitState::IDLE);
                         aout << "Units moved too far apart, ending combat" << std::endl;
                     } else {
                         // どちらかが死んだら戦闘終了
                         if (!unit2->isAlive() || !unit3->isAlive()) {
-                            unit2->setInCombat(false);
-                            unit3->setInCombat(false);
+                            unit2->setState(UnitState::IDLE);
+                            unit3->setState(UnitState::IDLE);
                             aout << "Combat ended - one unit defeated" << std::endl;
                         } else {
                             // 戦闘継続 - 攻撃処理を実行
@@ -248,15 +248,15 @@ void Renderer::render() {
                     // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
                     
                     // 戦闘状態を設定（移動停止）
-                    unit2->setInCombat(true);
-                    unit3->setInCombat(true);
+                    unit2->setState(UnitState::COMBAT);
+                    unit3->setState(UnitState::COMBAT);
                     
                     // 目標位置は設定しない（固定位置を維持）
                     // unit2->setTargetPosition(unit2->getX(), unit2->getY());
                     // unit3->setTargetPosition(unit3->getX(), unit3->getY());
                 } 
                 // まだ戦闘中でなく、距離が十分ではない場合は移動を続ける
-                else if (!unit2->inCombat() && !unit3->inCombat()) {
+                else if (unit2->getState() != UnitState::COMBAT && unit3->getState() != UnitState::COMBAT) {
                     if (distance > 0.001f) { // ゼロ除算防止
                         // 方向ベクトルを正規化
                         float dirX = dx / distance;
@@ -290,8 +290,8 @@ void Renderer::render() {
                             // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
                             
                             // 戦闘状態に設定
-                            unit2->setInCombat(true);
-                            unit3->setInCombat(true);
+                            unit2->setState(UnitState::COMBAT);
+                            unit3->setState(UnitState::COMBAT);
                             
                             // 目標位置は設定しない（固定位置を維持）
                             // unit2->setTargetPosition(unit2->getX(), unit2->getY());
@@ -305,8 +305,8 @@ void Renderer::render() {
                         unit3->setPosition(unit3->getX() + 0.4f, unit3->getY());
                         
                         // 戦闘状態に設定
-                        unit2->setInCombat(true);
-                        unit3->setInCombat(true);
+                        unit2->setState(UnitState::COMBAT);
+                        unit3->setState(UnitState::COMBAT);
                     }
                 }
             }
@@ -329,21 +329,22 @@ void Renderer::render() {
                     bool unit1InRange = distance <= unit1->getAttackRange();
                     bool unit2InRange = distance <= unit2->getAttackRange();
                     
-                    if (unit1InRange || unit2InRange) {
-                        aout << "Units " << unit1->getName() << " and " << unit2->getName() 
-                             << " in combat range (distance: " << distance << ")" << std::endl;
-                        
-                        // 射程内にいるユニットが攻撃
-                        if (unit1InRange && unit1->canAttack()) {
-                            aout << unit1->getName() << " attacking " << unit2->getName() 
-                                 << " (range: " << unit1->getAttackRange() << ")" << std::endl;
-                            unit1->attack(unit2);
+                    // いずれかが射程内で、適切な状態の場合は戦闘開始
+                    if ((unit1InRange || unit2InRange)) {
+                        // ユニット1が射程内にいて、待機状態なら戦闘状態に移行
+                        // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
+                        if (unit1InRange && unit1->getState() == UnitState::IDLE) {
+                            unit1->setCombatTarget(unit2);
+                            unit1->setState(UnitState::COMBAT);
+                            aout << unit1->getName() << " entering combat with " << unit2->getName() << std::endl;
                         }
                         
-                        if (unit2InRange && unit2->canAttack()) {
-                            aout << unit2->getName() << " attacking " << unit1->getName() 
-                                 << " (range: " << unit2->getAttackRange() << ")" << std::endl;
-                            unit2->attack(unit1);
+                        // ユニット2が射程内にいて、待機状態なら戦闘状態に移行
+                        // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
+                        if (unit2InRange && unit2->getState() == UnitState::IDLE) {
+                            unit2->setCombatTarget(unit1);
+                            unit2->setState(UnitState::COMBAT);
+                            aout << unit2->getName() << " entering combat with " << unit1->getName() << std::endl;
                         }
                     }
                 }

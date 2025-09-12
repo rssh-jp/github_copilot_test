@@ -1,6 +1,9 @@
 #include "Unit.h"
 #include "AndroidOut.h"
 #include <cmath>
+#include <cstdlib>
+#include <algorithm>
+#include <vector>
 
 Unit::Unit(const std::string& name, int id, float x, float y, float speed,
            int maxHP, int minAttack, int maxAttack, int defense, float attackSpeed, float attackRange)
@@ -12,6 +15,8 @@ Unit::Unit(const std::string& name, int id, float x, float y, float speed,
     , targetX_(x)
     , targetY_(y)
     , hasTarget_(false)
+    , state_(UnitState::IDLE)
+    , combatTarget_(nullptr)
     , isBlocked_(false)
     , isColliding_(false)
     , isAttacking_(false)
@@ -41,7 +46,7 @@ Unit::~Unit() {
 }
 
 void Unit::update(float deltaTime) {
-    // 各フレームで状態フラグをリセット（必要に応じて再設定される）
+    // フラグをリセット
     isColliding_ = false;
     isAttacking_ = false;
     
@@ -50,43 +55,53 @@ void Unit::update(float deltaTime) {
     
     // ユニットが死亡している場合は処理をスキップ
     if (!isAlive()) {
+        setState(UnitState::IDLE);
         return;
     }
     
-    // ユニット1（RedUnit）以外は戦闘中の場合は位置を固定し、移動処理をスキップ
-    if (inCombat_ && name_ != "RedUnit") {
-        // 戦闘中は位置を変更しない
-        isBlocked_ = false; // 衝突フラグをリセット
+    // 状態に応じた処理を実行
+    switch (state_) {
+        case UnitState::IDLE:
+            updateIdleState(deltaTime);
+            break;
+            
+        case UnitState::MOVING:
+            updateMovingState(deltaTime);
+            break;
+            
+        case UnitState::COMBAT:
+            updateCombatState(deltaTime);
+            break;
+    }
+}
+
+void Unit::update(float deltaTime, const std::vector<std::shared_ptr<Unit>>& allUnits) {
+    // フラグをリセット
+    isColliding_ = false;
+    isAttacking_ = false;
+    
+    // 攻撃クールダウンを更新
+    updateAttackCooldown(deltaTime);
+    
+    // ユニットが死亡している場合は処理をスキップ
+    if (!isAlive()) {
+        setState(UnitState::IDLE);
         return;
     }
     
-    // 衝突でブロックされている場合も移動しない
-    if (isBlocked_) {
-        // 衝突状態をリセット（次のフレームで再計算される）
-        isBlocked_ = false;
-        return;
-    }
-    
-    // 目標位置が設定されている場合、その方向に移動
-    if (hasTarget_) {
-        // 現在位置と目標位置の差分を計算
-        float dirX = targetX_ - x_;
-        float dirY = targetY_ - y_;
-        
-        // 距離を計算
-        float distance = std::sqrt(dirX * dirX + dirY * dirY);
-        
-        // 目標位置に十分近づいた場合、移動を停止
-        if (distance < 0.01f) {
-            x_ = targetX_;
-            y_ = targetY_;
-            hasTarget_ = false;
-            aout << name_ << " reached target position (" << x_ << ", " << y_ << ")" << std::endl;
-            return;
-        }
-        
-        // 移動処理
-        move(dirX, dirY, deltaTime);
+    // 状態に応じた処理を実行
+    switch (state_) {
+        case UnitState::IDLE:
+            updateIdleState(deltaTime);
+            break;
+            
+        case UnitState::MOVING:
+            updateMovingState(deltaTime, allUnits);  // 衝突予測版を使用
+            break;
+            
+        case UnitState::COMBAT:
+            updateCombatState(deltaTime);
+            break;
     }
 }
 
@@ -148,16 +163,9 @@ void Unit::avoidCollisions(const std::vector<std::shared_ptr<Unit>>& units, floa
             
             // 相手も生きているユニットなら戦闘状態に移行
             if (other->isAlive()) {
-                // 移動を停止し、戦闘開始
-                isBlocked_ = true;
-                inCombat_ = true;  // 戦闘中フラグをオンに
+                aout << name_ << " collided with " << other->getName() << " - stopping movement and starting combat" << std::endl;
                 
-                // 目標位置を調整 - 現在位置を目標に設定
-                targetX_ = x_;
-                targetY_ = y_;
-                hasTarget_ = false;  // 移動目標をクリア
-                
-                // めり込みを防止するために位置を補正する
+                // 物理的な押し戻し処理
                 if (distanceSquared > 0.001f) { // ゼロ除算防止
                     float distance = std::sqrt(distanceSquared);
                     // めり込んだ分だけ押し戻す
@@ -179,9 +187,18 @@ void Unit::avoidCollisions(const std::vector<std::shared_ptr<Unit>>& units, floa
                     }
                 }
                 
+                // 移動を停止し、戦闘状態に移行
+                // isBlocked_ = true;  // ブロック状態を設定しない（新しい移動指令で再開可能）
+                hasTarget_ = false;  // 移動目標をクリア
+                
+                // 戦闘状態に設定し、戦闘対象を設定
+                setCombatTarget(other);
+                setState(UnitState::COMBAT);
+                
                 // 相手ユニットも戦闘状態にする
                 if (auto otherPtr = other) {
-                    otherPtr->setInCombat(true);
+                    otherPtr->setCombatTarget(shared_from_this());
+                    otherPtr->setState(UnitState::COMBAT);
                 }
                 
                 // 生きているユニット同士なら攻撃を行う
@@ -210,12 +227,12 @@ void Unit::avoidCollisions(const std::vector<std::shared_ptr<Unit>>& units, floa
             collisionCount++;
         } else {
             // ほぼ同じ位置にいる場合はランダムな方向に少し動かす
-            avoidX += static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f;
-            avoidY += static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f;
+            avoidX += static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f - 1.0f;
+            avoidY += static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 2.0f - 1.0f;
             collisionCount++;
             
-            // 重なっている場合は確実に停止
-            isBlocked_ = true;
+            // 重なっている場合でも、新しい移動指令があれば再試行可能
+            // isBlocked_ = true;  // ブロック状態を設定しない
         }
     }
     
@@ -238,9 +255,80 @@ void Unit::avoidCollisions(const std::vector<std::shared_ptr<Unit>>& units, floa
     }
     
     // 実際に衝突している場合、ログ出力
-    if (isBlocked_ && hasTarget_) {
+    if (hasTarget_) {
         aout << name_ << " is blocked due to collision with other units" << std::endl;
     }
+    
+    // 衝突がない場合は衝突状態をリセット
+    if (!actualCollision) {
+        isColliding_ = false;
+    }
+}
+
+float Unit::calculateSafeMovementRatio(float moveX, float moveY, 
+                                      const std::vector<std::shared_ptr<Unit>>& allUnits) {
+    if (!isAlive()) return 0.0f;
+    
+    float safeRatio = 1.0f; // 最大で100%移動可能
+    float currentX = x_;
+    float currentY = y_;
+    float moveLength = sqrt(moveX * moveX + moveY * moveY);
+    
+    if (moveLength < 0.001f) return 1.0f; // 移動しない場合は100%安全
+    
+    // 各ユニットとの衝突をチェック
+    for (const auto& other : allUnits) {
+        if (!other || !other->isAlive() || other->getId() == id_) {
+            continue; // 自分自身や無効なユニットはスキップ
+        }
+        
+        float otherX = other->getX();
+        float otherY = other->getY();
+        float safeDistance = COLLISION_RADIUS * 2 + 0.05f; // 衝突回避のための最小距離
+        
+        // 現在の距離
+        float currentDx = otherX - currentX;
+        float currentDy = otherY - currentY;
+        float currentDistance = sqrt(currentDx * currentDx + currentDy * currentDy);
+        
+        // 既に衝突している場合は、離れる方向の移動のみ許可
+        if (currentDistance <= safeDistance) {
+            // 相手から離れる方向かどうかチェック
+            float dotProduct = (moveX * currentDx + moveY * currentDy);
+            if (dotProduct > 0) {
+                // 相手に近づく方向なので移動不可
+                return 0.0f;
+            } else {
+                // 相手から離れる方向なので移動可能
+                continue;
+            }
+        }
+        
+        // 移動後の位置
+        float targetX = currentX + moveX;
+        float targetY = currentY + moveY;
+        
+        // 移動後の距離
+        float targetDx = otherX - targetX;
+        float targetDy = otherY - targetY;
+        float targetDistance = sqrt(targetDx * targetDx + targetDy * targetDy);
+        
+        // 移動後に衝突する場合、安全な距離で止まる比率を計算
+        if (targetDistance < safeDistance) {
+            // 線形補間で安全な停止位置を求める
+            // currentDistance から targetDistance への線形変化で
+            // safeDistance になる点を求める
+            
+            float distanceChange = targetDistance - currentDistance;
+            if (distanceChange < 0) { // 相手に近づく場合
+                float safeMoveRatio = (currentDistance - safeDistance) / (-distanceChange);
+                safeMoveRatio = std::max(0.0f, std::min(1.0f, safeMoveRatio));
+                safeRatio = std::min(safeRatio, safeMoveRatio);
+            }
+        }
+    }
+    
+    return std::max(0.0f, safeRatio);
 }
 
 void Unit::move(float dirX, float dirY, float deltaTime) {
@@ -254,16 +342,27 @@ void Unit::move(float dirX, float dirY, float deltaTime) {
         return;
     }
     
-    // 速度と経過時間に基づいて位置を更新
+    // 速度と経過時間に基づいて移動量を計算
     float dx = dirX * speed_ * deltaTime;
     float dy = dirY * speed_ * deltaTime;
     
-    // 位置を更新
-    x_ += dx;
-    y_ += dy;
+    // 空のユニットリストを作成（実際の実装では他のユニットのリストを渡す必要がある）
+    std::vector<std::shared_ptr<Unit>> allUnits;
+    // NOTE: これは空のリストなので、実際の使用時にはRenderer等から
+    // 全ユニットのリストを渡すように updateMovingState を修正する必要がある
     
-    // 詳細な移動ログはデバッグ時のみ出力するといい
-    // aout << "Unit " << name_ << " moved to (" << x_ << ", " << y_ << ")" << std::endl;
+    // 衝突予測による安全な移動比率を計算
+    float safeRatio = calculateSafeMovementRatio(dx, dy, allUnits);
+    
+    // 安全な範囲でのみ移動
+    x_ += dx * safeRatio;
+    y_ += dy * safeRatio;
+    
+    // 移動が制限された場合はログ出力
+    if (safeRatio < 1.0f) {
+        aout << name_ << " movement limited by collision prediction (ratio: " 
+             << safeRatio << ")" << std::endl;
+    }
 }
 
 void Unit::setPosition(float x, float y) {
@@ -278,20 +377,29 @@ void Unit::setPosition(float x, float y) {
 }
 
 void Unit::setTargetPosition(float x, float y) {
-    // ユニット1（RedUnit）は戦闘中でも移動可能、他のユニットは戦闘中は移動不可
-    if (inCombat_ && name_ != "RedUnit") {
-        aout << name_ << " is in combat and cannot move to new target position" << std::endl;
-        return;
+    aout << name_ << " setTargetPosition called: (" << x << ", " << y 
+         << "), current state=" << static_cast<int>(state_) << std::endl;
+    
+    // 戦闘状態から移動状態への切り替え
+    if (state_ == UnitState::COMBAT) {
+        aout << name_ << " ending combat with " 
+             << (combatTarget_ ? combatTarget_->getName() : "unknown target") 
+             << " to move to new target position" << std::endl;
     }
     
-    // ユニット1の場合は戦闘中でも移動可能であることをログに記録
-    if (inCombat_ && name_ == "RedUnit") {
-        aout << name_ << " is in combat but can still move to new target position (player controlled)" << std::endl;
-    }
+    // ブロック状態をリセット（新しい移動指令でブロックを解除）
+    isBlocked_ = false;
     
+    // 移動目標を設定
     targetX_ = x;
     targetY_ = y;
     hasTarget_ = true;
+    
+    aout << name_ << " hasTarget_ set to true, targetX_=" << targetX_ 
+         << ", targetY_=" << targetY_ << std::endl;
+    
+    // 移動状態に変更（戦闘対象も自動的にクリアされる）
+    setState(UnitState::MOVING);
     
     // 目標位置の設定ログを出力
     aout << name_ << " targeting position (" << x << ", " << y << ")" << std::endl;
@@ -346,6 +454,9 @@ int Unit::takeDamage(int damage) {
         // ダメージログを出力
         aout << name_ << " took " << actualDamage << " damage! HP: " 
              << currentHP_ << "/" << maxHP_ << std::endl;
+        
+        // 注意: 移動状態のユニットは攻撃されても移動を継続する
+        // 戦闘状態に自動的に変更されることはない
     }
     
     return actualDamage;
@@ -410,8 +521,214 @@ std::shared_ptr<Unit> Unit::findTargetToAttack(const std::vector<std::shared_ptr
     
     // 戦闘ターゲットを見つけた場合、それをログ出力
     if (closestEnemy && inCombat_) {
+        // 最も近い敵との距離をチェックして戦闘継続判定
+        float combatBreakDistance = attackRange_ * 2.0f; // 射程の2倍の距離で戦闘終了
+        if (closestDistanceSquared > combatBreakDistance * combatBreakDistance) {
+            // 敵から離れすぎた場合は戦闘を終了
+            inCombat_ = false;
+            isColliding_ = false;
+            aout << name_ << " ended combat - enemy too far away (distance: " 
+                 << std::sqrt(closestDistanceSquared) << ", max: " << combatBreakDistance << ")" << std::endl;
+            return nullptr; // 戦闘ターゲットなし
+        }
+        
         aout << name_ << " targeting " << closestEnemy->getName() << " for attack in combat" << std::endl;
     }
     
     return closestEnemy;
+}
+
+void Unit::setState(UnitState newState) {
+    if (state_ != newState) {
+        UnitState oldState = state_;
+        
+        // 戦闘状態から他の状態への変更時、戦闘対象との相互関係を解除
+        if (oldState == UnitState::COMBAT && newState != UnitState::COMBAT) {
+            if (combatTarget_) {
+                // 相手の戦闘対象が自分だった場合、相手も戦闘状態を解除
+                if (combatTarget_->getCombatTarget().get() == this && 
+                    combatTarget_->getState() == UnitState::COMBAT) {
+                    aout << "Breaking combat relationship between " << name_ 
+                         << " and " << combatTarget_->getName() << std::endl;
+                    combatTarget_->setCombatTarget(nullptr);
+                    combatTarget_->setState(UnitState::IDLE);
+                }
+            }
+        }
+        
+        state_ = newState;
+        
+        // 状態変更時の処理
+        switch (newState) {
+            case UnitState::IDLE:
+                inCombat_ = false;
+                combatTarget_ = nullptr;
+                aout << name_ << " state changed to IDLE" << std::endl;
+                break;
+                
+            case UnitState::MOVING:
+                inCombat_ = false;
+                combatTarget_ = nullptr;
+                aout << name_ << " state changed to MOVING" << std::endl;
+                break;
+                
+            case UnitState::COMBAT:
+                inCombat_ = true;
+                aout << name_ << " state changed to COMBAT" << std::endl;
+                break;
+        }
+    }
+}
+
+void Unit::updateIdleState(float deltaTime) {
+    // 待機状態では何もしない
+    // 移動目標が設定されたらsetTargetPositionで状態が変わる
+}
+
+void Unit::updateMovingState(float deltaTime) {
+    // 移動目標が設定されていない場合は待機状態に
+    if (!hasTarget_) {
+        setState(UnitState::IDLE);
+        return;
+    }
+    
+    // 現在位置と目標位置の差分を計算
+    float dirX = targetX_ - x_;
+    float dirY = targetY_ - y_;
+    
+    // 距離を計算
+    float distance = std::sqrt(dirX * dirX + dirY * dirY);
+    
+    // 目標位置に十分近づいた場合、移動を停止
+    if (distance < 0.01f) {
+        x_ = targetX_;
+        y_ = targetY_;
+        hasTarget_ = false;
+        setState(UnitState::IDLE);
+        aout << name_ << " reached target position (" << x_ << ", " << y_ << ")" << std::endl;
+        return;
+    }
+    
+    // 移動処理
+    move(dirX, dirY, deltaTime);
+}
+
+void Unit::updateMovingState(float deltaTime, const std::vector<std::shared_ptr<Unit>>& allUnits) {
+    // 移動目標が設定されていない場合は待機状態に
+    if (!hasTarget_) {
+        setState(UnitState::IDLE);
+        return;
+    }
+    
+    // 現在位置と目標位置の差分を計算
+    float dirX = targetX_ - x_;
+    float dirY = targetY_ - y_;
+    
+    // 距離を計算
+    float distance = std::sqrt(dirX * dirX + dirY * dirY);
+    
+    // 目標位置に十分近づいた場合、移動を停止
+    if (distance < 0.01f) {
+        x_ = targetX_;
+        y_ = targetY_;
+        hasTarget_ = false;
+        setState(UnitState::IDLE);
+        aout << name_ << " reached target position (" << x_ << ", " << y_ << ")" << std::endl;
+        return;
+    }
+    
+    // 方向ベクトルの正規化
+    float length = std::sqrt(dirX * dirX + dirY * dirY);
+    if (length > 0.001f) {
+        dirX /= length;
+        dirY /= length;
+    } else {
+        return;
+    }
+    
+    // 速度と経過時間に基づいて移動量を計算
+    float dx = dirX * speed_ * deltaTime;
+    float dy = dirY * speed_ * deltaTime;
+    
+    // 衝突予測による安全な移動比率を計算
+    float safeRatio = calculateSafeMovementRatio(dx, dy, allUnits);
+    
+    // 移動処理
+    if (safeRatio > 0.001f) {
+        // 安全な範囲で移動
+        x_ += dx * safeRatio;
+        y_ += dy * safeRatio;
+        
+        // 移動が制限された場合の処理
+        if (safeRatio < 0.99f) {
+            aout << name_ << " movement limited by collision (ratio: " 
+                 << safeRatio << "), position: (" << x_ << ", " << y_ << ")" << std::endl;
+            
+            // 障害物との接触による停止だが、新しい移動指令で再試行可能
+            // isBlocked_ = true; を設定しない
+        }
+    } else {
+        // 完全に移動できない場合
+        aout << name_ << " movement blocked by collision, maintaining position: (" 
+             << x_ << ", " << y_ << ")" << std::endl;
+        
+        // 他のユニットとの戦闘開始をチェック
+        bool foundCombatTarget = false;
+        for (const auto& other : allUnits) {
+            if (!other || !other->isAlive() || other->getId() == id_) {
+                continue;
+            }
+            
+            float dx_check = other->getX() - x_;
+            float dy_check = other->getY() - y_;
+            float dist = sqrt(dx_check * dx_check + dy_check * dy_check);
+            
+            // 接触距離内で、かつ敵対する場合は戦闘開始
+            if (dist <= COLLISION_RADIUS * 2 + 0.1f) {
+                aout << name_ << " starting combat with " << other->getName() 
+                     << " due to close contact" << std::endl;
+                
+                setCombatTarget(other);
+                setState(UnitState::COMBAT);
+                hasTarget_ = false; // 移動目標をクリア
+                foundCombatTarget = true;
+                break;
+            }
+        }
+        
+        // 戦闘対象が見つからない場合は、移動目標は保持（新しい指令で再試行可能）
+    }
+}
+
+void Unit::updateCombatState(float deltaTime) {
+    // 新しい移動目標が設定された場合は移動を優先
+    if (hasTarget_) {
+        setState(UnitState::MOVING);
+        aout << name_ << " leaving combat to move to new target" << std::endl;
+        return;
+    }
+    
+    // 戦闘対象が無効になった場合は待機状態に
+    if (!combatTarget_ || !combatTarget_->isAlive()) {
+        setState(UnitState::IDLE);
+        return;
+    }
+    
+    // 戦闘対象との距離をチェック
+    float dx = combatTarget_->getX() - x_;
+    float dy = combatTarget_->getY() - y_;
+    float distance = std::sqrt(dx * dx + dy * dy);
+    
+    // 攻撃射程外に出た場合は戦闘終了
+    if (distance > attackRange_ * 1.5f) {  // 射程の1.5倍で戦闘終了
+        setState(UnitState::IDLE);
+        aout << name_ << " ending combat - target out of range" << std::endl;
+        return;
+    }
+    
+    // 攻撃可能な場合は攻撃
+    if (canAttack() && distance <= attackRange_) {
+        attack(combatTarget_);
+        isAttacking_ = true;
+    }
 }

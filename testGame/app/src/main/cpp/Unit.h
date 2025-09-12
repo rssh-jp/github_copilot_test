@@ -2,14 +2,25 @@
 #define TESTGAME_UNIT_H
 
 #include <string>
+#include <memory>
+#include <vector>
 #include "Model.h"
+
+/**
+ * @brief ユニットの状態を表す列挙型
+ */
+enum class UnitState {
+    IDLE,     // 待機状態（移動していない）
+    MOVING,   // 移動状態
+    COMBAT    // 戦闘状態
+};
 
 /**
  * @brief ゲーム内のユニットを表すクラス
  * 
  * このクラスは平面上を動くユニットの基本情報と動作を定義します。
  */
-class Unit {
+class Unit : public std::enable_shared_from_this<Unit> {
 public:
 /**
  * @brief ユニットのコンストラクタ
@@ -39,6 +50,14 @@ Unit(const std::string& name, int id, float x, float y, float speed,
      * @param deltaTime 前フレームからの経過時間（秒）
      */
     virtual void update(float deltaTime);
+    
+    /**
+     * @brief ユニットを更新する（他のユニットとの相互作用含む）
+     * 
+     * @param deltaTime 前フレームからの経過時間（秒）
+     * @param allUnits 全ユニットのリスト（衝突予測用）
+     */
+    virtual void update(float deltaTime, const std::vector<std::shared_ptr<Unit>>& allUnits);
     
     /**
      * @brief 戦闘対象を探す
@@ -123,6 +142,34 @@ Unit(const std::string& name, int id, float x, float y, float speed,
     float getAttackRange() const { return attackRange_; }
     
     /**
+     * @brief ユニットの現在の状態を取得する
+     * 
+     * @return 現在の状態
+     */
+    UnitState getState() const { return state_; }
+    
+    /**
+     * @brief ユニットの状態を設定する
+     * 
+     * @param newState 新しい状態
+     */
+    void setState(UnitState newState);
+    
+    /**
+     * @brief 戦闘対象を設定する
+     * 
+     * @param target 戦闘対象のユニット
+     */
+    void setCombatTarget(std::shared_ptr<Unit> target) { combatTarget_ = target; }
+    
+    /**
+     * @brief 戦闘対象を取得する
+     * 
+     * @return 戦闘対象のユニット
+     */
+    std::shared_ptr<Unit> getCombatTarget() const { return combatTarget_; }
+    
+    /**
      * @brief 現在衝突中かどうかを取得する
      * 
      * @return 衝突中の場合はtrue、そうでなければfalse
@@ -144,6 +191,16 @@ Unit(const std::string& name, int id, float x, float y, float speed,
      * @param avoidanceStrength 回避の強さ（0.0～1.0）
      */
     void avoidCollisions(const std::vector<std::shared_ptr<Unit>>& units, float avoidanceStrength);
+    
+    /**
+     * @brief 移動予定地点での衝突をチェックし、安全な移動距離を計算する
+     * 
+     * @param moveX X方向の移動量
+     * @param moveY Y方向の移動量
+     * @param units 他のユニットのリスト
+     * @return 安全に移動できる最大の比率（0.0～1.0）
+     */
+    float calculateSafeMovementRatio(float moveX, float moveY, const std::vector<std::shared_ptr<Unit>>& units);
     
     /**
      * @brief 攻撃処理を行う
@@ -254,6 +311,12 @@ Unit(const std::string& name, int id, float x, float y, float speed,
     void setInCombat(bool state) { inCombat_ = state; }
 
 private:
+    // 状態更新メソッド
+    void updateIdleState(float deltaTime);
+    void updateMovingState(float deltaTime);
+    void updateMovingState(float deltaTime, const std::vector<std::shared_ptr<Unit>>& allUnits);
+    void updateCombatState(float deltaTime);
+    
     std::string name_; ///< ユニットの名前
     int id_;           ///< ユニットの一意識別子
     float x_;          ///< X座標
@@ -263,6 +326,12 @@ private:
     float targetX_;    ///< 目標X座標
     float targetY_;    ///< 目標Y座標
     bool hasTarget_;   ///< 目標位置が設定されているか
+    
+    // 状態管理
+    UnitState state_;  ///< ユニットの現在の状態
+    std::shared_ptr<Unit> combatTarget_; ///< 戦闘対象のユニット
+    
+    // 状態フラグ（後方互換性のため維持）
     bool isBlocked_;   ///< 衝突によって移動が妨げられているか
     bool isColliding_; ///< 現在衝突中かどうか（色変更のため）
     bool isAttacking_; ///< 攻撃中かどうか（視覚効果のため）
