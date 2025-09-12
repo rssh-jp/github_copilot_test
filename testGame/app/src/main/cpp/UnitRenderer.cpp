@@ -44,6 +44,12 @@ void UnitRenderer::unregisterUnit(int unitId) {
     }
 }
 
+void UnitRenderer::clearAllUnits() {
+    aout << "Clearing all units. Total units: " << units_.size() << std::endl;
+    units_.clear();
+    unitTextures_.clear();
+}
+
 std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g, float b) {
     // RGB値をキーにして、すでに同じ色のテクスチャがキャッシュにあるか確認
     std::string colorKey = std::to_string(r) + "_" + std::to_string(g) + "_" + std::to_string(b);
@@ -60,7 +66,7 @@ std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g, fl
     return texture;
 }
 
-void UnitRenderer::renderUnits(const Shader* shader) {
+void UnitRenderer::render(const Shader* shader) {
     for (const auto& pair : units_) {
         const auto& unitId = pair.first;
         const auto& unit = pair.second;
@@ -327,4 +333,16 @@ Model UnitRenderer::createUnitModel() {
     aout << "Created red texture with ID: " << redTexture->getTextureID() << std::endl;
     
     return Model(vertices, indices, redTexture);
+}
+
+std::shared_ptr<Unit> UnitRenderer::getUnit(int unitId) const {
+    auto it = units_.find(unitId);
+    if (it != units_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+const std::unordered_map<int, std::shared_ptr<Unit>>& UnitRenderer::getAllUnits() const {
+    return units_;
 }

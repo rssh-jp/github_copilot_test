@@ -41,6 +41,13 @@ public:
      */
     void render();
 
+    /*!
+     * UnitRendererへの参照を取得する
+     * 
+     * @return UnitRendererへのポインタ
+     */
+    UnitRenderer* getUnitRenderer() const;
+
 private:
     /*!
      * Performs necessary OpenGL initialization. Customize this if you want to change your EGL
@@ -78,6 +85,7 @@ private:
      */
     void moveUnitToPosition(float x, float y);
 
+private:
     android_app *app_;
     EGLDisplay display_;
     EGLSurface surface_;

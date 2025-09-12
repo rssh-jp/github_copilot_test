@@ -53,27 +53,47 @@ public:
     void unregisterUnit(int unitId);
     
     /**
-     * @brief 登録されたすべてのユニットをレンダリングする
-     * 
-     * @param shader 使用するシェーダー
+     * @brief 全ユニットをクリアする
      */
-    void renderUnits(const Shader* shader);
+    void clearAllUnits();
     
     /**
-     * @brief ユニットのHPバーを描画する
+     * @brief ユニットを描画する
      * 
-     * @param shader 使用するシェーダー
-     * @param unit 対象のユニット
+     * @param shader 描画に使用するシェーダー
+     */
+    void render(const Shader* shader);
+    
+    /**
+     * @brief 特定のユニットのHPバーを描画する
+     * 
+     * @param shader 描画に使用するシェーダー
+     * @param unit HPバーを描画するユニット
      */
     void renderHPBar(const Shader* shader, const std::shared_ptr<Unit>& unit);
     
     /**
-     * @brief 登録されたすべてのユニットの位置を更新する
+     * @brief すべてのユニットの状態を更新する
      * 
-     * @param deltaTime 前フレームからの経過時間（秒）
+     * @param deltaTime 前回の更新からの経過時間（秒）
      */
     void updateUnits(float deltaTime);
     
+    /**
+     * @brief 指定したIDのユニットを取得する
+     * 
+     * @param unitId ユニットのID
+     * @return 指定されたIDのユニット（存在しない場合はnullptr）
+     */
+    std::shared_ptr<Unit> getUnit(int unitId) const;
+    
+    /**
+     * @brief すべてのユニットを取得する
+     * 
+     * @return すべてのユニットのマップ
+     */
+    const std::unordered_map<int, std::shared_ptr<Unit>>& getAllUnits() const;
+
 private:
     // ユニットのモデルデータを生成する
     Model createUnitModel();

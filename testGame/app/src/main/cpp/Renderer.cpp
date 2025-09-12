@@ -11,6 +11,9 @@
 #include "Utility.h"
 #include "TextureAsset.h"
 
+// JNI関数の前方宣言
+extern "C" void setRendererReference(Renderer* renderer);
+
 //! executes glGetString and outputs the result to logcat
 #define PRINT_GL_STRING(s) {aout << #s": "<< glGetString(s) << std::endl;}
 
@@ -356,7 +359,7 @@ void Renderer::render() {
         unitRenderer_->updateUnits(deltaTime);
         
         // すべてのユニットを描画
-        unitRenderer_->renderUnits(shader_.get());
+        unitRenderer_->render(shader_.get());
     } else {
         aout << "unitRenderer_ is null!" << std::endl;
     }
@@ -478,11 +481,8 @@ void Renderer::initRenderer() {
     // シェーダーをアクティブ化
     shader_->activate();
     
-    // デバッグのため、背景色を設定
-    glClearColor(0.0f, 0.0f, 0.3f, 1.0f); // 暗い青色で明らかに変化がわかるように
-
-    // 背景色を深い青色に設定（夜空のような色）
-    glClearColor(0.0f, 0.0f, 0.2f, 1.0f);
+    // 明確に見える背景色を設定（明るい緑色）
+    glClearColor(0.0f, 0.8f, 0.0f, 1.0f); // 明るい緑色で明らかに見えるように
 
     // enable alpha globally for now, you probably don't want to do this in a game
     glEnable(GL_BLEND);
@@ -490,6 +490,9 @@ void Renderer::initRenderer() {
 
     // get some demo models into memory
     createModels();
+    
+    // JNI用のRenderer参照を設定
+    setRendererReference(this);
 }
 
 void Renderer::updateRenderArea() {
@@ -747,4 +750,8 @@ void Renderer::moveUnitToPosition(float x, float y) {
             aout << "Moving Unit1 (RedUnit) to position (" << x << ", " << y << ")" << std::endl;
         }
     }
+}
+
+UnitRenderer* Renderer::getUnitRenderer() const {
+    return unitRenderer_.get();
 }
