@@ -1,7 +1,7 @@
 #include <jni.h>
 
-#include "AndroidOut.h"
-#include "Renderer.h"
+#include "frameworks/android/AndroidOut.h"
+#include "frameworks/graphics/Renderer.h"
 
 #include <game-activity/GameActivity.cpp>
 #include <game-text-input/gametextinput.cpp>

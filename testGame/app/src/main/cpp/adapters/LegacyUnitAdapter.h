@@ -1,10 +1,10 @@
 #ifndef SIMULATION_GAME_LEGACY_UNIT_ADAPTER_H
 #define SIMULATION_GAME_LEGACY_UNIT_ADAPTER_H
 
-#include "../../Unit.h" // 既存のUnitクラス
-#include "../../domain/entities/UnitEntity.h"
-#include "../../domain/value_objects/Position.h"
-#include "../../domain/value_objects/UnitStats.h"
+#include "../legacy/Unit.h" // 既存のUnitクラス
+#include "../domain/entities/UnitEntity.h"
+#include "../domain/value_objects/Position.h"
+#include "../domain/value_objects/UnitStats.h"
 #include <memory>
 
 /**

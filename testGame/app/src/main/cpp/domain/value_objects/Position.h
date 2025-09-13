@@ -1,6 +1,8 @@
 #ifndef SIMULATION_GAME_POSITION_H
 #define SIMULATION_GAME_POSITION_H
 
+#include <cmath>
+
 /**
  * @brief 位置情報を表す値オブジェクト
  * 

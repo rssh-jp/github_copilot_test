@@ -1,7 +1,7 @@
 #include <android/imagedecoder.h>
 #include "TextureAsset.h"
-#include "AndroidOut.h"
-#include "Utility.h"
+#include "android/AndroidOut.h"
+#include "utils/Utility.h"
 
 std::shared_ptr<TextureAsset>
 TextureAsset::loadAsset(AAssetManager *assetManager, const std::string &assetPath) {

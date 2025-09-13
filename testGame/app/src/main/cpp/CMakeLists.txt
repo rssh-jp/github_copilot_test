@@ -16,6 +16,10 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/usecases
     ${CMAKE_CURRENT_SOURCE_DIR}/adapters
     ${CMAKE_CURRENT_SOURCE_DIR}/frameworks
+    ${CMAKE_CURRENT_SOURCE_DIR}/frameworks/android
+    ${CMAKE_CURRENT_SOURCE_DIR}/frameworks/graphics
+    ${CMAKE_CURRENT_SOURCE_DIR}/frameworks/input
+    ${CMAKE_CURRENT_SOURCE_DIR}/frameworks/utils
 )
 
 # Source files organized by layer
@@ -29,22 +33,25 @@ set(USECASE_SOURCES
     # Usecases (header-only for now)
 )
 
-set(LEGACY_SOURCES
+set(FRAMEWORK_SOURCES
+    frameworks/android/AndroidOut.cpp
+    frameworks/android/UnitStatusJNI.cpp
+    frameworks/graphics/Renderer.cpp
+    frameworks/graphics/Shader.cpp
+    frameworks/graphics/TextureAsset.cpp
+    frameworks/graphics/UnitRenderer.cpp
+    frameworks/utils/Utility.cpp
+)
+
+set(MAIN_SOURCES
     main.cpp
-    AndroidOut.cpp
-    Renderer.cpp
-    Shader.cpp
-    TextureAsset.cpp
-    Utility.cpp
-    Unit.cpp
-    UnitRenderer.cpp
-    UnitStatusJNI.cpp
 )
 
 # Creates your game shared library. The name must be the same as the
 # one used for loading in your Kotlin/Java or AndroidManifest.txt files.
 add_library(testgame SHARED
-        ${LEGACY_SOURCES}
+        ${FRAMEWORK_SOURCES}
+        ${MAIN_SOURCES}
         ${DOMAIN_SOURCES}
         ${USECASE_SOURCES}
 )

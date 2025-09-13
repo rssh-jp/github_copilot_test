@@ -1,6 +1,8 @@
 #ifndef SIMULATION_GAME_UNIT_STATS_H
 #define SIMULATION_GAME_UNIT_STATS_H
 
+#include <cmath>
+
 /**
  * @brief ユニットのステータスを表す値オブジェクト
  * 

@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <random>
+#include <algorithm>
 
 /**
  * @brief 戦闘結果を表す構造体
