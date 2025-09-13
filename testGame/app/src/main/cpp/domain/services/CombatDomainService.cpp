@@ -35,15 +35,17 @@ CombatDomainService::CombatResult CombatDomainService::executeCombat(
     return CombatResult(damage, targetKilled, attackerKilled);
 }
 
+int CombatDomainService::getRandomAttackPower(const UnitStats& stats) {
+    if (stats.getMinAttackPower() == stats.getMaxAttackPower()) return stats.getMinAttackPower();
+    return stats.getMinAttackPower() + (rand() % (stats.getMaxAttackPower() - stats.getMinAttackPower() + 1));
+}
+
 int CombatDomainService::calculateDamage(
     const UnitStats& attackerStats, const UnitStats& targetStats) {
-    
-    // 基本ダメージ = 攻撃力 × ランダム補正
-    float baseDamage = attackerStats.getAttackPower() * dis_(gen_);
-    
+    // 基本ダメージ = 攻撃力（乱数）× ランダム補正
+    float baseDamage = getRandomAttackPower(attackerStats) * dis_(gen_);
     // 将来的に防御力を実装する場合はここで計算
     // float finalDamage = baseDamage - targetStats.defensePower;
-    
     // 最低1ダメージは与える
     return std::max(1, static_cast<int>(baseDamage));
 }

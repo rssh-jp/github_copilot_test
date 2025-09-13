@@ -581,15 +581,15 @@ void Renderer::createModels() {
     // UnitEntityとUnitStatsを使用してユニットを作成
     auto unit1 = std::make_shared<UnitEntity>(1, "RedUnit", 
                                              Position(0.0f, 2.0f), 
-                                             UnitStats(150, 150, 8, 1.0f, 0.8f, 1.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒
+                                             UnitStats(150, 150, 8, 12, 1.0f, 0.8f, 1.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
     
     auto unit2 = std::make_shared<UnitEntity>(2, "BlueUnit", 
                                              Position(-1.0f, 0.0f), 
-                                             UnitStats(100, 100, 5, 0.6f, 0.4f, 1.0f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒
+                                             UnitStats(100, 100, 5, 9, 0.6f, 0.4f, 1.0f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
     
     auto unit3 = std::make_shared<UnitEntity>(3, "GreenUnit", 
                                              Position(1.0f, 0.0f), 
-                                             UnitStats(80, 80, 3, 0.5f, 1.2f, 2.0f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒
+                                             UnitStats(80, 80, 3, 6, 0.5f, 1.2f, 2.0f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
     
     // ユニットをリストに追加
     units_.push_back(unit1);

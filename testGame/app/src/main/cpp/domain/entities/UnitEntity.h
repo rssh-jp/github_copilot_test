@@ -82,7 +82,8 @@ public:
         if (!canAttack(nowTime)) return false;
         if (!isInAttackRange(target)) return false;
         lastAttackTime_ = nowTime;
-        target.takeDamage(stats_.getAttackPower());
+        int damage = stats_.getRandomAttackPower();
+        target.takeDamage(damage);
         return true;
     }
     

@@ -103,14 +103,16 @@ Java_com_example_testgame_MainActivity_getMaxHp(JNIEnv *env, jobject /* this */)
     return unit->getStats().getMaxHp();
 }
 
+
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getMinAttack(JNIEnv *env, jobject /* this */) {
     auto unit = getPlayerUnit();
     if (!unit) {
         return 0;
     }
-    return unit->getStats().getAttackPower();
+    return unit->getStats().getMinAttackPower();
 }
+
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getMaxAttack(JNIEnv *env, jobject /* this */) {
@@ -118,7 +120,7 @@ Java_com_example_testgame_MainActivity_getMaxAttack(JNIEnv *env, jobject /* this
     if (!unit) {
         return 0;
     }
-    return unit->getStats().getAttackPower();
+    return unit->getStats().getMaxAttackPower();
 }
 
 extern "C" JNIEXPORT jint JNICALL

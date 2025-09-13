@@ -20,6 +20,10 @@
 class CombatDomainService {
 public:
     /**
+     * @brief 攻撃力をmin-max範囲でランダム取得
+     */
+    static int getRandomAttackPower(const UnitStats& stats);
+    /**
      * @brief 戦闘結果を表す構造体
      */
     struct CombatResult {
