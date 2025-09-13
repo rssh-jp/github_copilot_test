@@ -143,6 +143,44 @@ public:
     }
     
     /**
+     * @brief 移動を更新（フレーム毎の移動処理）
+     * @param deltaTime フレーム間の時間（秒）
+     */
+    void updateMovement(float deltaTime) {
+        if (state_ == UnitState::DEAD) {
+            return;
+        }
+        
+        // 目標位置に向かって移動
+        float distance = position_.distanceTo(targetPosition_);
+        const float ARRIVAL_THRESHOLD = 0.05f; // 到着判定の閾値
+        
+        if (distance > ARRIVAL_THRESHOLD) {
+            // 移動方向を計算
+            float dx = targetPosition_.getX() - position_.getX();
+            float dy = targetPosition_.getY() - position_.getY();
+            
+            // 正規化
+            float moveX = (dx / distance) * stats_.getMoveSpeed() * deltaTime;
+            float moveY = (dy / distance) * stats_.getMoveSpeed() * deltaTime;
+            
+            // 移動量が残り距離を超える場合は目標位置に直接設定
+            if (std::sqrt(moveX * moveX + moveY * moveY) >= distance) {
+                position_ = targetPosition_;
+                state_ = UnitState::IDLE;
+            } else {
+                // 新しい位置に移動
+                position_ = Position(position_.getX() + moveX, position_.getY() + moveY);
+                state_ = UnitState::MOVING;
+            }
+        } else {
+            // 目標位置に到達
+            position_ = targetPosition_;
+            state_ = UnitState::IDLE;
+        }
+    }
+    
+    /**
      * @brief ダメージを受ける
      * @param damage ダメージ量
      * @return ダメージを受けた後も生きているかどうか

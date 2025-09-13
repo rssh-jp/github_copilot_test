@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 #include <android/imagedecoder.h>
+#include <chrono>
+#include <limits>
 
 #include "android/AndroidOut.h"
 #include "Shader.h"
@@ -121,6 +123,25 @@ Renderer::~Renderer() {
 }
 
 void Renderer::render() {
+    // フレーム時間の計算（簡易的な実装）
+    static auto lastTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    auto deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+    lastTime = currentTime;
+    
+    // デルタタイムの上限を設定（フレームレート低下時の不具合を防ぐ）
+    deltaTime = std::min(deltaTime, 0.016f); // 最大60FPS相当
+    
+    // ゲームロジックの更新
+    if (movementUseCase_) {
+        movementUseCase_->updateMovements(deltaTime);
+    }
+    
+    if (combatUseCase_) {
+        combatUseCase_->executeAutoCombat();
+        combatUseCase_->removeDeadUnits();
+    }
+
     // Check to see if the surface has changed size. This is _necessary_ to do every frame when
     // using immersive mode as you'll get no other notification that your renderable area has
     // changed.
@@ -612,6 +633,33 @@ void Renderer::createModels() {
     
     aout << "Created " << units_.size() << " units" << std::endl;
     aout << "Unit2 and Unit3 are fixed at their initial positions" << std::endl;
+    
+    // ユースケースを初期化
+    combatUseCase_ = std::make_unique<CombatUseCase>(units_);
+    movementUseCase_ = std::make_unique<MovementUseCase>(units_);
+    
+    // 戦闘イベントのコールバックを設定
+    combatUseCase_->setCombatEventCallback([this](const UnitEntity& attacker, const UnitEntity& target, const CombatDomainService::CombatResult& result) {
+        aout << "Combat: Unit " << attacker.getId() << " attacked Unit " << target.getId() 
+             << " for " << result.damageDealt << " damage" << std::endl;
+        if (result.targetKilled) {
+            aout << "Unit " << target.getId() << " was killed!" << std::endl;
+        }
+        if (result.attackerKilled) {
+            aout << "Unit " << attacker.getId() << " was killed by counter attack!" << std::endl;
+        }
+    });
+    
+    // 移動イベントのコールバックを設定
+    movementUseCase_->setMovementEventCallback([this](const UnitEntity& unit, const Position& from, const Position& to) {
+        aout << "Movement: Unit " << unit.getId() << " moved from (" << from.getX() << ", " << from.getY() 
+             << ") to (" << to.getX() << ", " << to.getY() << ")" << std::endl;
+    });
+    
+    movementUseCase_->setMovementFailedCallback([this](const UnitEntity& unit, const Position& target, const std::string& reason) {
+        aout << "Movement Failed: Unit " << unit.getId() << " could not move to (" 
+             << target.getX() << ", " << target.getY() << ") - " << reason << std::endl;
+    });
 }
 
 void Renderer::handleInput() {
@@ -731,7 +779,7 @@ void Renderer::screenToWorldCoordinates(float screenX, float screenY, float& wor
 }
 
 void Renderer::moveUnitToPosition(float x, float y) {
-    if (units_.empty() || !unitRenderer_) {
+    if (units_.empty() || !unitRenderer_ || !movementUseCase_) {
         return;
     }
     
@@ -740,7 +788,6 @@ void Renderer::moveUnitToPosition(float x, float y) {
     float closestDistance = std::numeric_limits<float>::max();
     
     // ユニットのタップ判定用のヒットボックスサイズ
-    // ユニットサイズを0.2に変更したので、それに合わせて小さくする
     const float UNIT_HITBOX_SIZE = 0.25f;
     
     for (const auto& unit : units_) {
@@ -760,14 +807,29 @@ void Renderer::moveUnitToPosition(float x, float y) {
         }
     }
     
-    // ユニット1（RedUnit）のみをタッチで移動させる
-    if (!units_.empty()) {
-        auto unit1 = units_[0];  // ユニット1は最初の要素
-        if (unit1->getName() == "RedUnit") {
-            // ユニット1をタッチした位置に移動
+    // タッチ処理の優先順位：
+    // 1. ユニットをタップした場合は、そのユニットを移動
+    // 2. 空の場所をタップした場合は、Unit1（RedUnit）を移動
+    if (tappedUnit) {
+        // タップされたユニットを移動（衝突判定とユースケースを使用）
+        Position targetPos(x, y);
+        bool moveSuccess = movementUseCase_->moveUnitTo(tappedUnit->getId(), targetPos);
+        if (moveSuccess) {
+            aout << "Moving " << tappedUnit->getName() << " to position (" << x << ", " << y << ") with collision avoidance" << std::endl;
+        } else {
+            aout << "Failed to move " << tappedUnit->getName() << " to position (" << x << ", " << y << ")" << std::endl;
+        }
+    } else {
+        // 空の場所をタップした場合、Unit1（RedUnit）を移動
+        if (!units_.empty()) {
+            auto unit1 = units_[0];  // ユニット1は最初の要素
             Position targetPos(x, y);
-            unit1->setTargetPosition(targetPos);
-            aout << "Moving Unit1 (RedUnit) to position (" << x << ", " << y << ")" << std::endl;
+            bool moveSuccess = movementUseCase_->moveUnitTo(unit1->getId(), targetPos);
+            if (moveSuccess) {
+                aout << "Moving " << unit1->getName() << " to empty space at (" << x << ", " << y << ") with collision avoidance" << std::endl;
+            } else {
+                aout << "Failed to move " << unit1->getName() << " to empty space at (" << x << ", " << y << ")" << std::endl;
+            }
         }
     }
 }

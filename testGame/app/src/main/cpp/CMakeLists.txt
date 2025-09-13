@@ -27,10 +27,16 @@ set(DOMAIN_SOURCES
     # Value Objects (header-only, no .cpp files needed)
     
     # Entities (header-only for now, can add .cpp if needed)
+    
+    # Domain Services
+    domain/services/CombatDomainService.cpp
+    domain/services/CollisionDomainService.cpp
 )
 
 set(USECASE_SOURCES
-    # Usecases (header-only for now)
+    # Usecases
+    usecases/CombatUseCase.cpp
+    usecases/MovementUseCase.cpp
 )
 
 set(FRAMEWORK_SOURCES

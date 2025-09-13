@@ -8,6 +8,8 @@
 #include "Shader.h"
 #include "entities/UnitEntity.h"
 #include "UnitRenderer.h"
+#include "../../usecases/CombatUseCase.h"
+#include "../../usecases/MovementUseCase.h"
 
 struct android_app;
 
@@ -101,6 +103,10 @@ private:
     // ユニット管理
     std::unique_ptr<UnitRenderer> unitRenderer_;
     std::vector<std::shared_ptr<UnitEntity>> units_;
+    
+    // ユースケース
+    std::unique_ptr<CombatUseCase> combatUseCase_;
+    std::unique_ptr<MovementUseCase> movementUseCase_;
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_RENDERER_H
