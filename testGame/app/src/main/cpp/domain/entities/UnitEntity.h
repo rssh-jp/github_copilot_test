@@ -37,7 +37,7 @@ public:
      */
     UnitEntity(int id, const std::string& name, const Position& position, const UnitStats& stats)
         : id_(id), name_(name), position_(position), stats_(stats), 
-          targetPosition_(position), state_(UnitState::IDLE) {}
+          targetPosition_(position), state_(UnitState::IDLE), lastAttackTime_(-1000.0f) {}
     
     // コピー・ムーブセマンティクス
     UnitEntity(const UnitEntity&) = default;
@@ -70,8 +70,20 @@ public:
     /**
      * @brief ユニットが攻撃可能かチェック
      */
-    bool canAttack() const {
-        return isAlive() && state_ != UnitState::DEAD;
+    // 現在時刻(秒)を引数で受け取る想定
+    bool canAttack(float nowTime) const {
+        if (!isAlive() || state_ == UnitState::DEAD) return false;
+        float interval = 1.0f / stats_.getAttackSpeed();
+        return (nowTime - lastAttackTime_) >= interval;
+    }
+
+    // 攻撃処理: 攻撃可能なら攻撃し、lastAttackTime_を更新
+    bool tryAttack(UnitEntity& target, float nowTime) {
+        if (!canAttack(nowTime)) return false;
+        if (!isInAttackRange(target)) return false;
+        lastAttackTime_ = nowTime;
+        target.takeDamage(stats_.getAttackPower());
+        return true;
     }
     
     /**
@@ -267,6 +279,7 @@ private:
     Position targetPosition_;   // 移動目標位置
     UnitStats stats_;          // ステータス
     UnitState state_;          // 現在の状態
+    float lastAttackTime_;     // 最後の攻撃時刻
 };
 
 #endif // SIMULATION_GAME_UNIT_ENTITY_H

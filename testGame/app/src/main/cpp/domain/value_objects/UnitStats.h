@@ -21,9 +21,9 @@ public:
      * @param moveSpeed 移動速度
      * @param attackRange 攻撃範囲
      */
-    UnitStats(int maxHp, int currentHp, int attackPower, float moveSpeed, float attackRange)
-        : maxHp_(maxHp), currentHp_(currentHp), attackPower_(attackPower), 
-          moveSpeed_(moveSpeed), attackRange_(attackRange) {
+        UnitStats(int maxHp, int currentHp, int attackPower, float moveSpeed, float attackRange, float attackSpeed)
+                : maxHp_(maxHp), currentHp_(currentHp), attackPower_(attackPower), 
+                    moveSpeed_(moveSpeed), attackRange_(attackRange), attackSpeed_(attackSpeed) {
         
         // ビジネスルール: 現在HPは最大HPを超えられない
         if (currentHp_ > maxHp_) {
@@ -35,21 +35,21 @@ public:
         if (maxHp_ < 1) maxHp_ = 1;
         if (attackPower_ < 0) attackPower_ = 0;
         if (moveSpeed_ < 0.0f) moveSpeed_ = 0.0f;
-        if (attackRange_ < 0.0f) attackRange_ = 0.0f;
+    if (attackRange_ < 0.0f) attackRange_ = 0.0f;
+    if (attackSpeed_ < 0.01f) attackSpeed_ = 0.01f; // 0は不可
     }
     
     /**
      * @brief デフォルトステータスでユニットを作成
      */
     static UnitStats createDefault() {
-        return UnitStats(100, 100, 20, 1.0f, 2.0f);
+        return UnitStats(100, 100, 20, 1.0f, 2.0f, 1.0f); // 攻撃速度: 1回/秒
     }
-    
     /**
      * @brief 強いユニットのステータスを作成
      */
     static UnitStats createStrong() {
-        return UnitStats(150, 150, 30, 1.2f, 2.5f);
+        return UnitStats(150, 150, 30, 1.2f, 2.5f, 2.0f); // 攻撃速度: 2回/秒
     }
     
     // ゲッター
@@ -58,6 +58,7 @@ public:
     int getAttackPower() const { return attackPower_; }
     float getMoveSpeed() const { return moveSpeed_; }
     float getAttackRange() const { return attackRange_; }
+    float getAttackSpeed() const { return attackSpeed_; }
     
     /**
      * @brief HPの割合を取得（0.0〜1.0）
@@ -80,7 +81,7 @@ public:
      */
     UnitStats takeDamage(int damage) const {
         int newHp = currentHp_ - damage;
-        return UnitStats(maxHp_, newHp, attackPower_, moveSpeed_, attackRange_);
+        return UnitStats(maxHp_, newHp, attackPower_, moveSpeed_, attackRange_, attackSpeed_);
     }
     
     /**
@@ -90,7 +91,7 @@ public:
      */
     UnitStats heal(int healAmount) const {
         int newHp = currentHp_ + healAmount;
-        return UnitStats(maxHp_, newHp, attackPower_, moveSpeed_, attackRange_);
+        return UnitStats(maxHp_, newHp, attackPower_, moveSpeed_, attackRange_, attackSpeed_);
     }
     
     /**
@@ -99,7 +100,7 @@ public:
      * @return 変更後のステータス
      */
     UnitStats withAttackPower(int newAttackPower) const {
-        return UnitStats(maxHp_, currentHp_, newAttackPower, moveSpeed_, attackRange_);
+        return UnitStats(maxHp_, currentHp_, newAttackPower, moveSpeed_, attackRange_, attackSpeed_);
     }
     
     /**
@@ -108,7 +109,7 @@ public:
      * @return 変更後のステータス
      */
     UnitStats withMoveSpeed(float newMoveSpeed) const {
-        return UnitStats(maxHp_, currentHp_, attackPower_, newMoveSpeed, attackRange_);
+        return UnitStats(maxHp_, currentHp_, attackPower_, newMoveSpeed, attackRange_, attackSpeed_);
     }
     
     // 等価性演算子
@@ -117,7 +118,8 @@ public:
                currentHp_ == other.currentHp_ &&
                attackPower_ == other.attackPower_ &&
                std::abs(moveSpeed_ - other.moveSpeed_) < EPSILON &&
-               std::abs(attackRange_ - other.attackRange_) < EPSILON;
+               std::abs(attackRange_ - other.attackRange_) < EPSILON &&
+               std::abs(attackSpeed_ - other.attackSpeed_) < EPSILON;
     }
     
     bool operator!=(const UnitStats& other) const {
@@ -130,6 +132,7 @@ private:
     int attackPower_;
     float moveSpeed_;
     float attackRange_;
+    float attackSpeed_; // 1秒あたり攻撃回数
     
     static constexpr float EPSILON = 1e-6f;
 };

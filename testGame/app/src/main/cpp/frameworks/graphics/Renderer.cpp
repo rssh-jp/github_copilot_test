@@ -233,16 +233,16 @@ void Renderer::render() {
                             aout << "Combat ended - one unit defeated" << std::endl;
                         } else {
                             // 戦闘継続 - 攻撃処理を実行
+                            float currentTime = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count());
                             
-                            // TODO: UnitEntityには攻撃メソッドがないため一時的にコメントアウト
                             // ユニット2がユニット3を攻撃
-                            // if (unit2->canAttack()) {
-                            //     unit2->attack(unit3);
-                            // }
+                            if (unit2->tryAttack(*unit3, currentTime)) {
+                                aout << "Unit2 attacks Unit3!" << std::endl;
+                            }
                             // ユニット3がユニット2を攻撃
-                            // if (unit3->canAttack()) {
-                            //     unit3->attack(unit2);
-                            // }
+                            if (unit3->tryAttack(*unit2, currentTime)) {
+                                aout << "Unit3 attacks Unit2!" << std::endl;
+                            }
                         }
                     }
                     return;
@@ -581,15 +581,15 @@ void Renderer::createModels() {
     // UnitEntityとUnitStatsを使用してユニットを作成
     auto unit1 = std::make_shared<UnitEntity>(1, "RedUnit", 
                                              Position(0.0f, 2.0f), 
-                                             UnitStats(150, 150, 8, 1.0f, 0.8f));  // 高火力・高HP・赤ユニット
+                                             UnitStats(150, 150, 8, 1.0f, 0.8f, 1.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒
     
     auto unit2 = std::make_shared<UnitEntity>(2, "BlueUnit", 
                                              Position(-1.0f, 0.0f), 
-                                             UnitStats(100, 100, 5, 0.6f, 0.4f));  // 中火力・高防御・青ユニット
+                                             UnitStats(100, 100, 5, 0.6f, 0.4f, 1.0f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒
     
     auto unit3 = std::make_shared<UnitEntity>(3, "GreenUnit", 
                                              Position(1.0f, 0.0f), 
-                                             UnitStats(80, 80, 3, 0.5f, 1.2f));   // 低火力・高速・緑ユニット
+                                             UnitStats(80, 80, 3, 0.5f, 1.2f, 2.0f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒
     
     // ユニットをリストに追加
     units_.push_back(unit1);
