@@ -1,5 +1,6 @@
 #include "CombatUseCase.h"
 #include <algorithm>
+#include <chrono>
 
 CombatUseCase::CombatUseCase(std::vector<std::shared_ptr<UnitEntity>>& units)
     : units_(units) {
@@ -10,22 +11,36 @@ void CombatUseCase::setCombatEventCallback(CombatEventCallback callback) {
 }
 
 void CombatUseCase::executeAutoCombat() {
+    // 現在時刻を秒で取得
+    auto now = std::chrono::high_resolution_clock::now();
+    float nowSec = std::chrono::duration<float>(now.time_since_epoch()).count();
+
     // 全ユニットをチェックして自動戦闘を実行
     for (auto& unit : units_) {
         if (unit->getStats().getCurrentHp() <= 0) {
             continue; // 死亡ユニットはスキップ
         }
 
-        // 攻撃範囲内の敵を検索
+        // 射程内の敵を探索
         auto target = findTargetInRange(*unit);
-        if (target && target->getStats().getCurrentHp() > 0) {
-            // 戦闘実行
-            auto result = CombatDomainService::executeCombat(*unit, *target);
-            
-            // イベント通知
-            if (combatEventCallback_) {
-                combatEventCallback_(*unit, *target, result);
-            }
+        if (!(target && target->getStats().getCurrentHp() > 0)) {
+            continue;
+        }
+
+        // 攻撃可能かどうか（攻撃速度によるクールダウンを尊重）
+        if (!unit->canAttack(nowSec)) {
+            continue;
+        }
+
+        // 戦闘実行
+        auto result = CombatDomainService::executeCombat(*unit, *target);
+
+        // 攻撃時刻の更新（ユースケース側で管理）
+        unit->setLastAttackTime(nowSec);
+
+        // イベント通知
+        if (combatEventCallback_) {
+            combatEventCallback_(*unit, *target, result);
         }
     }
 }

@@ -87,6 +87,11 @@ public:
         return true;
     }
     
+        /**
+         * @brief 外部からlastAttackTime_を設定する（UseCaseが攻撃受付後に呼ぶ）
+         */
+        void setLastAttackTime(float t) { lastAttackTime_ = t; }
+    
     /**
      * @brief 指定した位置が攻撃範囲内かチェック
      * @param targetPosition 攻撃対象の位置

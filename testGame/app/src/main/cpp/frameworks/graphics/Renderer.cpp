@@ -203,146 +203,6 @@ void Renderer::render() {
     if (unitRenderer_) {
         aout << "Drawing units..." << std::endl;
         
-        // ユニット2と3がお互いに向かって移動するように設定
-        if (units_.size() >= 3) {
-            auto& unit2 = units_[1];
-            auto& unit3 = units_[2];
-            
-            // ユニット2と3が生きている場合のみ自動戦闘処理を実行
-            if (unit2->isAlive() && unit3->isAlive()) {
-                // ユニット間のベクトルを計算
-                auto pos2 = unit2->getPosition();
-                auto pos3 = unit3->getPosition();
-                float dx = pos3.getX() - pos2.getX();
-                float dy = pos3.getY() - pos2.getY();
-                float distance = std::sqrt(dx * dx + dy * dy);
-                
-                // 両方のユニットがすでに戦闘中の場合は攻撃を継続
-                if (unit2->getState() == UnitState::COMBAT && unit3->getState() == UnitState::COMBAT) {
-                    // 距離が離れすぎた場合は戦闘解除
-                    const float COLLISION_RADIUS = 0.1f; // UnitEntityの衝突半径
-                    if (distance > COLLISION_RADIUS * 2.5f) {
-                        unit2->setState(UnitState::IDLE);
-                        unit3->setState(UnitState::IDLE);
-                        aout << "Units moved too far apart, ending combat" << std::endl;
-                    } else {
-                        // どちらかが死んだら戦闘終了
-                        if (!unit2->isAlive() || !unit3->isAlive()) {
-                            unit2->setState(UnitState::IDLE);
-                            unit3->setState(UnitState::IDLE);
-                            aout << "Combat ended - one unit defeated" << std::endl;
-                        } else {
-                            // 戦闘継続 - 攻撃処理を実行
-                            float currentTime = static_cast<float>(std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count());
-                            
-                            // ユニット2がユニット3を攻撃
-                            if (unit2->tryAttack(*unit3, currentTime)) {
-                                aout << "Unit2 attacks Unit3!" << std::endl;
-                            }
-                            // ユニット3がユニット2を攻撃
-                            if (unit3->tryAttack(*unit2, currentTime)) {
-                                aout << "Unit3 attacks Unit2!" << std::endl;
-                            }
-                        }
-                    }
-                    return;
-                }
-                
-                // 適切な戦闘距離（衝突半径の2倍＋少し余裕）
-                const float COLLISION_RADIUS = 0.1f; // UnitEntityの衝突半径
-                float combatDistance = COLLISION_RADIUS * 2.0f + 0.05f;
-                
-                // 距離のログを出力（デバッグ用）
-                aout << "Current distance between units: " << distance << ", combat distance: " << combatDistance << std::endl;
-                
-                // 現在の距離が衝突判定距離より小さい場合、両方のユニットを戦闘状態にして停止させる
-                if (distance <= COLLISION_RADIUS * 2.0f) {
-                    aout << "Units are colliding at distance " << distance << ", setting combat mode" << std::endl;
-                    
-                    // 方向ベクトルを計算（ゼロ除算防止）
-                    float dirX = 0.0f;
-                    float dirY = 0.0f;
-                    if (distance > 0.001f) {
-                        dirX = dx / distance;
-                        dirY = dy / distance;
-                    }
-                    
-                    // 両方のユニットの位置を明確に設定して、衝突を確実にする
-                    float halfDistance = COLLISION_RADIUS * 0.9f; // 少し近づける
-                    
-                    // ユニット2とユニット3の位置は変更しない（固定位置を維持）
-                    // float midX = (unit2->getX() + unit3->getX()) / 2.0f;
-                    // float midY = (unit2->getY() + unit3->getY()) / 2.0f;
-                    
-                    // unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
-                    // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
-                    
-                    // 戦闘状態を設定（移動停止）
-                    unit2->setState(UnitState::COMBAT);
-                    unit3->setState(UnitState::COMBAT);
-                    
-                    // 目標位置は設定しない（固定位置を維持）
-                    // unit2->setTargetPosition(unit2->getX(), unit2->getY());
-                    // unit3->setTargetPosition(unit3->getX(), unit3->getY());
-                } 
-                // まだ戦闘中でなく、距離が十分ではない場合は移動を続ける
-                else if (unit2->getState() != UnitState::COMBAT && unit3->getState() != UnitState::COMBAT) {
-                    if (distance > 0.001f) { // ゼロ除算防止
-                        // 方向ベクトルを正規化
-                        float dirX = dx / distance;
-                        float dirY = dy / distance;
-                        
-                        // 衝突判定の半径を考慮して、ちょうど良い距離で止まるように目標位置を設定
-                        float safeDistance = combatDistance;
-                        
-                        // 距離によって異なる処理を行う
-                        if (distance > combatDistance * 1.2f) {
-                            // ユニット2とユニット3は移動させない（固定位置を維持）
-                            // float targetX2 = unit3->getX();
-                            // float targetY2 = unit3->getY();
-                            // unit2->setTargetPosition(targetX2, targetY2);
-                            
-                            // float targetX3 = unit2->getX();
-                            // float targetY3 = unit2->getY();
-                            // unit3->setTargetPosition(targetX3, targetY3);
-                            
-                            aout << "Units moving directly towards each other, distance: " << distance << std::endl;
-                        } else {
-                            // 距離が適切になったら戦闘状態に設定し、位置を固定
-                            
-                            // ユニット2とユニット3の位置は変更しない（固定位置を維持）
-                            // float halfDistance = combatDistance / 2.0f;
-                            // float midX = (unit2->getX() + unit3->getX()) / 2.0f;
-                            // float midY = (unit2->getY() + unit3->getY()) / 2.0f;
-                            
-                            // 中心点から適切な距離に配置
-                            // unit2->setPosition(midX - dirX * halfDistance, midY - dirY * halfDistance);
-                            // unit3->setPosition(midX + dirX * halfDistance, midY + dirY * halfDistance);
-                            
-                            // 戦闘状態に設定
-                            unit2->setState(UnitState::COMBAT);
-                            unit3->setState(UnitState::COMBAT);
-                            
-                            // 目標位置は設定しない（固定位置を維持）
-                            // unit2->setTargetPosition(unit2->getX(), unit2->getY());
-                            // unit3->setTargetPosition(unit3->getX(), unit3->getY());
-                            
-                            aout << "Units reached combat distance, stopping movement and adjusting positions" << std::endl;
-                        }
-                    } else {
-                        // ほぼ同じ位置にいる場合は適切な距離に再配置
-                        // TODO: UnitEntityには直接位置設定するメソッドがないため一時的にコメントアウト
-                        // unit2->setPosition(unit2->getX() - 0.4f, unit2->getY());
-                        // unit3->setPosition(unit3->getX() + 0.4f, unit3->getY());
-                        
-                        // 戦闘状態に設定
-                        unit2->setState(UnitState::COMBAT);
-                        unit3->setState(UnitState::COMBAT);
-                    }
-                }
-            }
-        }
-        
         // 射程ベースの戦闘システム - 全ユニットペアをチェック
         for (size_t i = 0; i < units_.size(); ++i) {
             for (size_t j = i + 1; j < units_.size(); ++j) {
@@ -581,15 +441,15 @@ void Renderer::createModels() {
     // UnitEntityとUnitStatsを使用してユニットを作成
     auto unit1 = std::make_shared<UnitEntity>(1, "RedUnit", 
                                              Position(0.0f, 2.0f), 
-                                             UnitStats(150, 150, 8, 12, 1.0f, 0.5f, 1.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
+                                             UnitStats(150, 150, 8, 12, 1.0f, 0.5f, 0.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
     
     auto unit2 = std::make_shared<UnitEntity>(2, "BlueUnit", 
                                              Position(-1.0f, 0.0f), 
-                                             UnitStats(100, 100, 5, 9, 1.0f, 0.4f, 1.0f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
+                                             UnitStats(100, 100, 5, 9, 1.0f, 0.6f, 0.4f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
     
     auto unit3 = std::make_shared<UnitEntity>(3, "GreenUnit", 
                                              Position(1.0f, 0.0f), 
-                                             UnitStats(80, 80, 3, 6, 1.0f, 0.3f, 2.0f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
+                                             UnitStats(80, 80, 3, 6, 1.0f, 0.8f, 0.6f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
     
     // ユニットをリストに追加
     units_.push_back(unit1);
