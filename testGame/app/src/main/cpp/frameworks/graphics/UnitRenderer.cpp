@@ -1,5 +1,7 @@
 #include "UnitRenderer.h"
 #include "android/AndroidOut.h"
+#include "../domain/services/CollisionDomainService.h"
+#include <cmath>
 
 UnitRenderer::UnitRenderer(std::shared_ptr<TextureAsset> spTexture)
     : spTexture_(spTexture)
@@ -153,6 +155,66 @@ void UnitRenderer::render(const Shader* shader) {
             renderHPBar(shader, unit);
         }
     }
+
+    // 全ユニットの当たり判定ワイヤーフレームを最前面に表示
+    if (showCollisionWireframes_) {
+        renderCollisionWireframes(shader);
+    }
+}
+
+void UnitRenderer::setShowCollisionWireframes(bool show) {
+    showCollisionWireframes_ = show;
+}
+
+void UnitRenderer::renderCollisionWireframes(const Shader* shader) {
+    // 衝突半径はドメインサービスで定義されている
+    const float radius = CollisionDomainService::getCollisionRadius();
+
+    // シンプルな円のワイヤーフレームをユニットごとに生成して描画
+    // 頂点数は12で十分（表示負荷が小さい）
+    const int segments = 24;
+    std::vector<Vertex> circleVertices;
+    circleVertices.reserve(segments);
+    std::vector<Index> circleIndices;
+    circleIndices.reserve(segments);
+
+    for (int i = 0; i < segments; ++i) {
+        float theta = (2.0f * 3.14159265358979323846f * i) / segments;
+        float x = std::cos(theta) * radius;
+        float y = std::sin(theta) * radius;
+        circleVertices.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
+        circleIndices.push_back(static_cast<Index>(i));
+    }
+
+    // ワイヤーフレームを描く際にテクスチャは使わないが、ModelはTextureAssetを要求する。
+    // 既存のgetColorTextureを利用して透明なテクスチャを取得する。
+    auto lineTexture = getColorTexture(1.0f, 1.0f, 1.0f);
+
+    Model circleModel(circleVertices, circleIndices, lineTexture);
+
+    // 深度を最前面に表示するために、ポリゴンオフセットやデプスレンジを操作
+    // ここでは深度テストは有効のまま、深度書き込みを無効化して描画する（常に前面に見える）
+    glDepthMask(GL_FALSE); // 深度書き込みオフ
+
+    for (const auto& pair : units_) {
+        const auto& unit = pair.second;
+        if (!unit) continue;
+
+        // モデルマトリクスをユニット位置に設定
+        float modelMatrix[16] = {0};
+        modelMatrix[0] = 1.0f; modelMatrix[5] = 1.0f; modelMatrix[10] = 1.0f; modelMatrix[15] = 1.0f;
+        auto position = unit->getPosition();
+        modelMatrix[12] = position.getX();
+        modelMatrix[13] = position.getY();
+
+        shader->setModelMatrix(modelMatrix);
+
+        // 色はユニットの色に合わせたい場合はテクスチャを変える
+        // 今は白で描画する
+        shader->drawModelWithMode(circleModel, GL_LINE_LOOP);
+    }
+
+    glDepthMask(GL_TRUE); // 深度書き込みを元に戻す
 }
 
 void UnitRenderer::updateUnits(float deltaTime) {

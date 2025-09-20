@@ -94,6 +94,16 @@ public:
      */
     const std::unordered_map<int, std::shared_ptr<UnitEntity>>& getAllUnits() const;
 
+    /**
+     * @brief 当たり判定のワイヤーフレーム表示を有効／無効にする
+     */
+    void setShowCollisionWireframes(bool show);
+
+    /**
+     * @brief 当たり判定ワイヤーフレームを描画する
+     */
+    void renderCollisionWireframes(const Shader* shader);
+
 private:
     // ユニットのモデルデータを生成する
     Model createUnitModel();
@@ -115,6 +125,9 @@ private:
     
     // ユニットのモデル
     Model unitModel_;
+
+    // 当たり判定ワイヤーフレームの表示フラグ
+    bool showCollisionWireframes_ = false;
 };
 
 #endif // TESTGAME_UNITRENDERER_H

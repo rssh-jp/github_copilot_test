@@ -436,6 +436,8 @@ void Renderer::createModels() {
     
     // ユニットレンダラーを初期化（背景テクスチャを再利用）
     unitRenderer_ = std::make_unique<UnitRenderer>(bgTexture);
+    // デバッグ用途: 当たり判定ワイヤーフレームを常に表示
+    unitRenderer_->setShowCollisionWireframes(true);
     
     // テスト用にいくつかのユニットを作成（異なる色と移動速度、戦闘パラメータを設定）
     // UnitEntityとUnitStatsを使用してユニットを作成

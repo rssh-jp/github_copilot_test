@@ -64,6 +64,13 @@ public:
      */
     void drawModel(const Model &model) const;
 
+    /**
+     * Draw a model using a specified primitive mode (e.g. GL_TRIANGLES, GL_LINE_LOOP).
+     * This allows callers to render outlines/wireframes without changing the existing
+     * drawModel call sites.
+     */
+    void drawModelWithMode(const Model &model, GLenum mode) const;
+
     /*!
      * Sets the model/view/projection matrix in the shader.
      * @param projectionMatrix sixteen floats, column major, defining an OpenGL projection matrix.

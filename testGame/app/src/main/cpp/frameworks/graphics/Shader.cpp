@@ -200,6 +200,61 @@ void Shader::drawModel(const Model &model) const {
     glDisableVertexAttribArray(position_);
 }
 
+void Shader::drawModelWithMode(const Model &model, GLenum mode) const {
+    // Similar setup to drawModel but allows specifying primitive mode
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) {
+        aout << "OpenGL error before drawModelWithMode: " << err << std::endl;
+    }
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), model.getVertexData());
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), ((uint8_t *) model.getVertexData()) + sizeof(Vector3));
+    glEnableVertexAttribArray(1);
+
+    glActiveTexture(GL_TEXTURE0);
+    GLuint textureID = model.getTexture().getTextureID();
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    GLint currentProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+    GLint texLoc = glGetUniformLocation(currentProgram, "uTexture");
+    if (texLoc != -1) {
+        glUniform1i(texLoc, 0);
+    }
+
+    aout << "Drawing with texture ID (mode): " << textureID << " mode: " << mode << std::endl;
+
+    // If caller asks for a line mode, convert triangles to line loop per quad by drawing the
+    // index list as GL_TRIANGLES but with polygon offset or using primitive restart it's complex.
+    // Simpler approach: draw the elements as GL_LINE_LOOP by iterating each triangle triplet
+    // and emitting lines for the triangle edges. For small models this is fine.
+    if (mode == GL_LINE_LOOP || mode == GL_LINES || mode == GL_LINE_STRIP) {
+        // Build an index list of lines from triangle indices
+        auto indexCount = model.getIndexCount();
+        const Index* idx = model.getIndexData();
+        std::vector<Index> lineIndices;
+        lineIndices.reserve(indexCount * 2);
+        for (size_t i = 0; i + 2 < indexCount; i += 3) {
+            Index a = idx[i];
+            Index b = idx[i+1];
+            Index c = idx[i+2];
+            // edges: a-b, b-c, c-a
+            lineIndices.push_back(a); lineIndices.push_back(b);
+            lineIndices.push_back(b); lineIndices.push_back(c);
+            lineIndices.push_back(c); lineIndices.push_back(a);
+        }
+        // Draw lines using element array
+        glDrawElements(GL_LINES, static_cast<GLsizei>(lineIndices.size()), GL_UNSIGNED_SHORT, lineIndices.data());
+    } else {
+        glDrawElements(mode, model.getIndexCount(), GL_UNSIGNED_SHORT, model.getIndexData());
+    }
+
+    glDisableVertexAttribArray(uv_);
+    glDisableVertexAttribArray(position_);
+}
+
 void Shader::setProjectionMatrix(float *projectionMatrix) const {
     glUniformMatrix4fv(projectionMatrix_, 1, false, projectionMatrix);
 }
