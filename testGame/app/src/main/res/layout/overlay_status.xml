@@ -33,7 +33,7 @@
             <Button
                 android:id="@+id/button_pan_up"
                 android:layout_width="48dp"
-                android:layout_height="32dp"
+                android:layout_height="48dp"
                 android:background="#FF000000"
                 android:textColor="#FFFFFFFF"
                 android:text="上"
@@ -75,7 +75,7 @@
             <Button
                 android:id="@+id/button_pan_down"
                 android:layout_width="48dp"
-                android:layout_height="32dp"
+                android:layout_height="48dp"
                 android:background="#FF000000"
                 android:textColor="#FFFFFFFF"
                 android:text="下"
