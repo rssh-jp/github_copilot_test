@@ -167,38 +167,43 @@ void UnitRenderer::setShowCollisionWireframes(bool show) {
 }
 
 void UnitRenderer::renderCollisionWireframes(const Shader* shader) {
-    // 衝突半径はドメインサービスで定義されている
-    const float radius = CollisionDomainService::getCollisionRadius();
-
-    // シンプルな円のワイヤーフレームをユニットごとに生成して描画
-    // 頂点数は12で十分（表示負荷が小さい）
-    const int segments = 24;
-    std::vector<Vertex> circleVertices;
-    circleVertices.reserve(segments);
-    std::vector<Index> circleIndices;
-    circleIndices.reserve(segments);
-
-    for (int i = 0; i < segments; ++i) {
-        float theta = (2.0f * 3.14159265358979323846f * i) / segments;
-        float x = std::cos(theta) * radius;
-        float y = std::sin(theta) * radius;
-        circleVertices.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
-        circleIndices.push_back(static_cast<Index>(i));
-    }
-
-    // ワイヤーフレームを描く際にテクスチャは使わないが、ModelはTextureAssetを要求する。
-    // 既存のgetColorTextureを利用して透明なテクスチャを取得する。
-    auto lineTexture = getColorTexture(1.0f, 1.0f, 1.0f);
-
-    Model circleModel(circleVertices, circleIndices, lineTexture);
-
-    // 深度を最前面に表示するために、ポリゴンオフセットやデプスレンジを操作
-    // ここでは深度テストは有効のまま、深度書き込みを無効化して描画する（常に前面に見える）
+    // 深度を最前面に表示するために深度書き込みを無効化
     glDepthMask(GL_FALSE); // 深度書き込みオフ
+
+    const int segments = 32;
 
     for (const auto& pair : units_) {
         const auto& unit = pair.second;
         if (!unit) continue;
+
+        float radius = unit->getStats().getCollisionRadius();
+
+        // 円頂点を生成
+        std::vector<Vertex> circleVertices;
+        circleVertices.reserve(segments);
+        std::vector<Index> circleIndices;
+        circleIndices.reserve(segments);
+
+        for (int i = 0; i < segments; ++i) {
+            float theta = (2.0f * 3.14159265358979323846f * i) / segments;
+            float x = std::cos(theta) * radius;
+            float y = std::sin(theta) * radius;
+            circleVertices.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
+            circleIndices.push_back(static_cast<Index>(i));
+        }
+
+        // ワイヤーフレームの色はユニットごとの色をベースに少し濃くする
+        float lr = 0.2f, lg = 0.2f, lb = 0.2f; // デフォルトは濃い灰色
+        int unitId = pair.first;
+        if (unitId == 1) {
+            lr = 0.8f; lg = 0.15f; lb = 0.15f; // 濃い赤
+        } else if (unitId == 2) {
+            lr = 0.15f; lg = 0.15f; lb = 0.8f; // 濃い青
+        } else if (unitId == 3) {
+            lr = 0.15f; lg = 0.8f; lb = 0.15f; // 濃い緑
+        }
+        auto lineTexture = getColorTexture(lr, lg, lb);
+        Model circleModel(circleVertices, circleIndices, lineTexture);
 
         // モデルマトリクスをユニット位置に設定
         float modelMatrix[16] = {0};
@@ -208,9 +213,6 @@ void UnitRenderer::renderCollisionWireframes(const Shader* shader) {
         modelMatrix[13] = position.getY();
 
         shader->setModelMatrix(modelMatrix);
-
-        // 色はユニットの色に合わせたい場合はテクスチャを変える
-        // 今は白で描画する
         shader->drawModelWithMode(circleModel, GL_LINE_LOOP);
     }
 

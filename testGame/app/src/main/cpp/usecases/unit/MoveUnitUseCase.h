@@ -207,19 +207,22 @@ private:
      */
     bool hasCollision(const UnitEntity& unit, const Position& newPosition) const {
         // 範囲内の他ユニットを取得
-        auto nearbyUnits = unitRepository_->findInRange(newPosition, collisionRadius_ * 2.0f);
-        
+        // 検索半径は自ユニット半径 + 最大想定他ユニット半径（簡易的に自ユニット半径を2倍で検索）
+        float searchRadius = unit.getStats().getCollisionRadius() * 2.0f;
+        auto nearbyUnits = unitRepository_->findInRange(newPosition, searchRadius);
+
         for (const auto& otherUnit : nearbyUnits) {
             if (otherUnit->getId() == unit.getId() || !otherUnit->isAlive()) {
                 continue; // 自分自身または死亡ユニットは無視
             }
-            
+
             float distance = newPosition.distanceTo(otherUnit->getPosition());
-            if (distance < collisionRadius_) {
+            float combinedRadius = unit.getStats().getCollisionRadius() + otherUnit->getStats().getCollisionRadius();
+            if (distance < combinedRadius) {
                 return true; // 衝突検出
             }
         }
-        
+
         return false;
     }
     

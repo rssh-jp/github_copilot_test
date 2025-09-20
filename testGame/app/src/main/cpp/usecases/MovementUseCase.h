@@ -42,7 +42,8 @@ public:
      * @brief コンストラクタ
      * @param units 管理するユニットのリスト
      */
-    explicit MovementUseCase(std::vector<std::shared_ptr<UnitEntity>>& units);
+    explicit MovementUseCase(std::vector<std::shared_ptr<UnitEntity>>& units,
+                             const class MovementField* movementField = nullptr);
 
     /**
      * @brief 移動イベントコールバックを設定
@@ -80,6 +81,7 @@ public:
 
 private:
     std::vector<std::shared_ptr<UnitEntity>>& units_;
+    const class MovementField* movementField_ = nullptr;
     MovementEventCallback movementEventCallback_;
     MovementFailedCallback movementFailedCallback_;
 
@@ -97,6 +99,11 @@ private:
      * @brief 他のユニットのリストを取得（指定ユニット以外）
      */
     std::vector<std::shared_ptr<UnitEntity>> getOtherUnits(const UnitEntity& excludeUnit) const;
+    
+    /**
+     * @brief 指定ユニットの次フレームでの位置を計算
+     */
+    Position calculateNextPosition(const UnitEntity& unit, float deltaTime) const;
 };
 
 #endif // SIMULATION_GAME_MOVEMENT_USECASE_H

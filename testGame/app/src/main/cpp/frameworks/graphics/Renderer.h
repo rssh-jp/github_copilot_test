@@ -10,6 +10,8 @@
 #include "UnitRenderer.h"
 #include "../../usecases/CombatUseCase.h"
 #include "../../usecases/MovementUseCase.h"
+// MovementField is used by Renderer as a concrete type for the movement field instance
+#include "../../domain/services/MovementField.h"
 
 struct android_app;
 
@@ -107,6 +109,8 @@ private:
     // ユースケース
     std::unique_ptr<CombatUseCase> combatUseCase_;
     std::unique_ptr<MovementUseCase> movementUseCase_;
+    // Movement field for walkability and obstacles
+    std::unique_ptr<class MovementField> movementField_;
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_RENDERER_H

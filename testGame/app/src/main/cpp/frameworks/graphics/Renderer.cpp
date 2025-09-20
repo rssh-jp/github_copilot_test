@@ -443,15 +443,15 @@ void Renderer::createModels() {
     // UnitEntityとUnitStatsを使用してユニットを作成
     auto unit1 = std::make_shared<UnitEntity>(1, "RedUnit", 
                                              Position(0.0f, 2.0f), 
-                                             UnitStats(150, 150, 8, 12, 1.0f, 0.5f, 0.5f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
+                                             UnitStats(150, 150, 8, 12, 1.0f, 0.5f, 0.5f, 0.25f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
     
     auto unit2 = std::make_shared<UnitEntity>(2, "BlueUnit", 
                                              Position(-1.0f, 0.0f), 
-                                             UnitStats(100, 100, 5, 9, 1.0f, 0.6f, 0.4f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
+                                             UnitStats(100, 100, 5, 9, 1.0f, 0.6f, 0.4f, 0.25f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
     
     auto unit3 = std::make_shared<UnitEntity>(3, "GreenUnit", 
                                              Position(1.0f, 0.0f), 
-                                             UnitStats(80, 80, 3, 6, 1.0f, 0.8f, 0.6f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
+                                             UnitStats(80, 80, 3, 6, 1.0f, 0.8f, 0.6f, 0.25f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
     
     // ユニットをリストに追加
     units_.push_back(unit1);
@@ -496,9 +496,35 @@ void Renderer::createModels() {
     aout << "Created " << units_.size() << " units" << std::endl;
     aout << "Unit2 and Unit3 are fixed at their initial positions" << std::endl;
     
-    // ユースケースを初期化
+    // MovementField を作成（ワールド座標 -5..5 x -5..5）
+    movementField_ = std::make_unique<MovementField>(-5.0f, -5.0f, 5.0f, 5.0f);
+    // 視覚的にわかりやすい障害物を追加
+    movementField_->addCircleObstacle(Position(-1.5f, 0.5f), 0.5f);
+    movementField_->addCircleObstacle(Position(1.2f, -0.5f), 0.6f);
+
+    // 障害物を視覚化するために簡易的な円ポリゴンを models_ に追加（線で描画されるが目立つよう色をつける）
+    auto addCircleModel = [&](const Position& center, float radius, int segments, float r, float g, float b) {
+        std::vector<Vertex> verts;
+        std::vector<Index> inds;
+        verts.reserve(segments);
+        inds.reserve(segments);
+        for (int i = 0; i < segments; ++i) {
+            float theta = (2.0f * 3.14159265358979323846f * i) / segments;
+            float x = std::cos(theta) * radius + center.getX();
+            float y = std::sin(theta) * radius + center.getY();
+            verts.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
+            inds.push_back(static_cast<Index>(i));
+        }
+        auto tex = TextureAsset::createSolidColorTexture(r, g, b);
+        models_.emplace_back(verts, inds, tex);
+    };
+
+    addCircleModel(Position(-1.5f, 0.5f), 0.5f, 32, 1.0f, 0.3f, 0.3f); // 赤い障害物
+    addCircleModel(Position(1.2f, -0.5f), 0.6f, 32, 0.3f, 0.3f, 1.0f); // 青い障害物
+
+    // ユースケースを初期化（MovementField を注入）
     combatUseCase_ = std::make_unique<CombatUseCase>(units_);
-    movementUseCase_ = std::make_unique<MovementUseCase>(units_);
+    movementUseCase_ = std::make_unique<MovementUseCase>(units_, movementField_.get());
     
     // 戦闘イベントのコールバックを設定
     combatUseCase_->setCombatEventCallback([this](const UnitEntity& attacker, const UnitEntity& target, const CombatDomainService::CombatResult& result) {

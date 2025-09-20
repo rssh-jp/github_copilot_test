@@ -226,29 +226,14 @@ void Shader::drawModelWithMode(const Model &model, GLenum mode) const {
 
     aout << "Drawing with texture ID (mode): " << textureID << " mode: " << mode << std::endl;
 
-    // If caller asks for a line mode, convert triangles to line loop per quad by drawing the
-    // index list as GL_TRIANGLES but with polygon offset or using primitive restart it's complex.
-    // Simpler approach: draw the elements as GL_LINE_LOOP by iterating each triangle triplet
-    // and emitting lines for the triangle edges. For small models this is fine.
+    // If caller requests a line primitive (GL_LINE_LOOP / GL_LINE_STRIP / GL_LINES), draw using
+    // the provided index buffer directly. Some callers (like UnitRenderer) prepare models where
+    // indices are already ordered for line drawing (e.g. 0..N-1). Converting triangle indices to
+    // lines here breaks those models, so prefer direct draw with the requested primitive mode.
     if (mode == GL_LINE_LOOP || mode == GL_LINES || mode == GL_LINE_STRIP) {
-        // Build an index list of lines from triangle indices
-        auto indexCount = model.getIndexCount();
-        const Index* idx = model.getIndexData();
-        std::vector<Index> lineIndices;
-        lineIndices.reserve(indexCount * 2);
-        for (size_t i = 0; i + 2 < indexCount; i += 3) {
-            Index a = idx[i];
-            Index b = idx[i+1];
-            Index c = idx[i+2];
-            // edges: a-b, b-c, c-a
-            lineIndices.push_back(a); lineIndices.push_back(b);
-            lineIndices.push_back(b); lineIndices.push_back(c);
-            lineIndices.push_back(c); lineIndices.push_back(a);
-        }
-        // Draw lines using element array
-        glDrawElements(GL_LINES, static_cast<GLsizei>(lineIndices.size()), GL_UNSIGNED_SHORT, lineIndices.data());
+        glDrawElements(mode, static_cast<GLsizei>(model.getIndexCount()), GL_UNSIGNED_SHORT, model.getIndexData());
     } else {
-        glDrawElements(mode, model.getIndexCount(), GL_UNSIGNED_SHORT, model.getIndexData());
+        glDrawElements(mode, static_cast<GLsizei>(model.getIndexCount()), GL_UNSIGNED_SHORT, model.getIndexData());
     }
 
     glDisableVertexAttribArray(uv_);

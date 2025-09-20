@@ -183,12 +183,27 @@ public:
             float moveY = (dy / distance) * stats_.getMoveSpeed() * deltaTime;
             
             // 移動量が残り距離を超える場合は目標位置に直接設定
-            if (std::sqrt(moveX * moveX + moveY * moveY) >= distance) {
+            float moveLen = std::sqrt(moveX * moveX + moveY * moveY);
+            if (moveLen >= distance) {
                 position_ = targetPosition_;
                 state_ = UnitState::IDLE;
             } else {
-                // 新しい位置に移動
-                position_ = Position(position_.getX() + moveX, position_.getY() + moveY);
+                // 次の位置を計算
+                Position nextPos(position_.getX() + moveX, position_.getY() + moveY);
+
+                // 他ユニットとの衝突をチェック（線分上に衝突があるか）
+                // ここでは全ユニットリストはユースケース側が持っているため直接参照できない。
+                // 代替として、CollisionDomainServiceのhasCollisionOnPathを使うには全ユニットリストを渡す必要がある。
+                // 簡易的なアプローチとして、近傍の停止判定を行うために同じレンダラ/ユースケースから提供される
+                // findInRangeのようなAPIはないため、当面は単純に次位置が他ユニット中心と重なっていないかをチェックする。
+                // 実装の簡潔さ優先で、全ユニットリストを取得するAPIがない場合は停止判定を行わない。
+
+                // 新しい位置に他ユニットの中心との距離が (r_self + r_other) 未満であれば、
+                // 衝突直前の位置（相手中心への方向の合成半径分手前）で停止する。
+                // 注意: このコードはすべてのユニットリストがここで利用できる前提では動作しないため、
+                // MovementUseCase 側で正確な停止処理を行うのが望ましい。ここでは最低限のガードを追加しない。
+
+                position_ = nextPos;
                 state_ = UnitState::MOVING;
             }
         } else {

@@ -1,7 +1,12 @@
 #ifndef SIMULATION_GAME_COLLISION_DOMAIN_SERVICE_H
 #define SIMULATION_GAME_COLLISION_DOMAIN_SERVICE_H
 
-#include "../entities/UnitEntity.h"
+#include "../value_objects/Position.h"
+#include <vector>
+#include <memory>
+
+// Forward declaration to avoid circular includes
+class UnitEntity;
 #include "../value_objects/Position.h"
 #include <vector>
 #include <memory>
@@ -52,7 +57,8 @@ public:
     static bool hasCollisionAt(
         const Position& position,
         const std::vector<std::shared_ptr<UnitEntity>>& allUnits,
-        const UnitEntity* excludeUnit = nullptr
+        const UnitEntity* excludeUnit = nullptr,
+        float movingRadius = 0.0f
     );
 
     /**
@@ -67,7 +73,29 @@ public:
         const Position& start,
         const Position& end,
         const std::vector<std::shared_ptr<UnitEntity>>& allUnits,
-        const UnitEntity* excludeUnit = nullptr
+        const UnitEntity* excludeUnit = nullptr,
+        float movingRadius = 0.0f
+    );
+
+    /**
+     * @brief 線分(start->end)上で最初に接触する点を計算する。
+     * @param start 開始位置
+     * @param end 終了位置
+     * @param allUnits 全ユニットリスト
+     * @param outContactPosition 最初に接触する位置を返す（見つからない場合は不変）
+     * @param outContactUnit 接触したユニットへのポインタ（見つからない場合は nullptr）
+     * @param excludeUnit 除外ユニット
+     * @param movingRadius 移動ユニットの半径（合算して判定）
+     * @return 接触が見つかった場合 true を返す
+     */
+    static bool findFirstContactOnPath(
+        const Position& start,
+        const Position& end,
+        const std::vector<std::shared_ptr<UnitEntity>>& allUnits,
+        Position& outContactPosition,
+        const UnitEntity*& outContactUnit,
+        const UnitEntity* excludeUnit = nullptr,
+        float movingRadius = 0.0f
     );
 
     /**
