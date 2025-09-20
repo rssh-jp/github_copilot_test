@@ -62,6 +62,11 @@ bool CombatUseCase::executeAttack(int attackerId, int targetId) {
         return false; // 攻撃範囲外
     }
     
+    // 同陣営への攻撃は許可しない
+    if (attacker->getFaction() == target->getFaction()) {
+        return false;
+    }
+    
     // 戦闘実行
     auto result = CombatDomainService::executeCombat(*attacker, *target);
     
@@ -116,6 +121,11 @@ std::shared_ptr<UnitEntity> CombatUseCase::findTargetInRange(const UnitEntity& a
         
         if (unit->getStats().getCurrentHp() <= 0) {
             continue; // 死亡ユニットは除外
+        }
+        
+        // 同陣営は攻撃対象外
+        if (unit->getFaction() == attacker.getFaction()) {
+            continue;
         }
         
         if (CombatDomainService::isInAttackRange(attacker, *unit)) {

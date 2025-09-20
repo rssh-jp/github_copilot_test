@@ -35,9 +35,9 @@ public:
      * @param position 初期位置
      * @param stats 初期ステータス
      */
-    UnitEntity(int id, const std::string& name, const Position& position, const UnitStats& stats)
-        : id_(id), name_(name), position_(position), stats_(stats), 
-          targetPosition_(position), state_(UnitState::IDLE), lastAttackTime_(-1000.0f) {}
+        UnitEntity(int id, const std::string& name, const Position& position, const UnitStats& stats, int faction = 0)
+                : id_(id), name_(name), position_(position), stats_(stats), 
+                    targetPosition_(position), state_(UnitState::IDLE), lastAttackTime_(-1000.0f), faction_(faction) {}
     
     // コピー・ムーブセマンティクス
     UnitEntity(const UnitEntity&) = default;
@@ -52,6 +52,8 @@ public:
     const Position& getTargetPosition() const { return targetPosition_; }
     const UnitStats& getStats() const { return stats_; }
     UnitState getState() const { return state_; }
+    int getFaction() const { return faction_; }
+    void setFaction(int f) { faction_ = f; }
     
     /**
      * @brief ユニットが生きているかチェック
@@ -301,6 +303,7 @@ private:
     UnitStats stats_;          // ステータス
     UnitState state_;          // 現在の状態
     float lastAttackTime_;     // 最後の攻撃時刻
+    int faction_;              // 陣営ID（0: default / neutral）
 };
 
 #endif // SIMULATION_GAME_UNIT_ENTITY_H

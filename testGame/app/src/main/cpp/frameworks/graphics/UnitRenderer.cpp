@@ -88,20 +88,21 @@ void UnitRenderer::render(const Shader* shader) {
         //     // 衝突中は明るい赤色に変更
         //     unitTexture = getColorTexture(1.0f, 0.2f, 0.2f);
         } else {
-            // HP状態に応じて色を変化させる（HPが低いと赤っぽく、高いと元の色に近くなる）
+        // HP状態に応じて色を変化させる（HPが低いと赤っぽく、高いと元の色に近くなる）
             float hpRatio = static_cast<float>(unit->getStats().getCurrentHp()) / unit->getStats().getMaxHp();
             
             auto textureIt = unitTextures_.find(unitId);
             if (textureIt != unitTextures_.end()) {
                 // 元の色情報を取得（簡易的な実装）
+                // 陣営に基づく基本色を選択
                 float r = 0.3f, g = 0.3f, b = 1.0f; // デフォルト青色
-                
-                if (unitId == 1) {
-                    r = 1.0f; g = 0.3f; b = 0.3f; // 赤ユニット
-                } else if (unitId == 2) {
-                    r = 0.3f; g = 0.3f; b = 1.0f; // 青ユニット
-                } else if (unitId == 3) {
-                    r = 0.3f; g = 1.0f; b = 0.3f; // 緑ユニット
+                int faction = unit->getFaction();
+                if (faction == 1) {
+                    r = 1.0f; g = 0.3f; b = 0.3f; // 赤陣営
+                } else if (faction == 2) {
+                    r = 0.3f; g = 0.3f; b = 1.0f; // 青陣営
+                } else if (faction == 3) {
+                    r = 0.3f; g = 1.0f; b = 0.3f; // 緑陣営
                 }
                 
                 // HPに応じて色を変化（HPが低いほど赤くなる）
@@ -192,16 +193,18 @@ void UnitRenderer::renderCollisionWireframes(const Shader* shader) {
             circleIndices.push_back(static_cast<Index>(i));
         }
 
-        // ワイヤーフレームの色はユニットごとの色をベースに少し濃くする
+        // ワイヤーフレームの色はユニットの陣営色をベースに暗めにする
+        int faction = unit->getFaction();
         float lr = 0.2f, lg = 0.2f, lb = 0.2f; // デフォルトは濃い灰色
-        int unitId = pair.first;
-        if (unitId == 1) {
+        if (faction == 1) {
             lr = 0.8f; lg = 0.15f; lb = 0.15f; // 濃い赤
-        } else if (unitId == 2) {
+        } else if (faction == 2) {
             lr = 0.15f; lg = 0.15f; lb = 0.8f; // 濃い青
-        } else if (unitId == 3) {
+        } else if (faction == 3) {
             lr = 0.15f; lg = 0.8f; lb = 0.15f; // 濃い緑
         }
+        // ワイヤーフレームはさらに暗くして目立ちすぎないようにする
+        lr *= 0.75f; lg *= 0.75f; lb *= 0.75f;
         auto lineTexture = getColorTexture(lr, lg, lb);
         Model circleModel(circleVertices, circleIndices, lineTexture);
 

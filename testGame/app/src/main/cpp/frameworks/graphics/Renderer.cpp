@@ -11,38 +11,14 @@
 #include "android/AndroidOut.h"
 #include "Shader.h"
 #include "utils/Utility.h"
+#include "../third_party/json.hpp"
+#include <android/asset_manager.h>
 #include "TextureAsset.h"
 #include "Model.h"
 
 // JNI関数の前方宣言
 extern "C" void setRendererReference(Renderer* renderer);
-
-//! executes glGetString and outputs the result to logcat
-#define PRINT_GL_STRING(s) {aout << #s": "<< glGetString(s) << std::endl;}
-
-/*!
- * @brief if glGetString returns a space separated list of elements, prints each one on a new line
- *
- * This works by creating an istringstream of the input c-style string. Then that is used to create
- * a vector -- each element of the vector is a new element in the input string. Finally a foreach
- * loop consumes this and outputs it to logcat using @a aout
- */
-#define PRINT_GL_STRING_AS_LIST(s) { \
-std::istringstream extensionStream((const char *) glGetString(s));\
-std::vector<std::string> extensionList(\
-        std::istream_iterator<std::string>{extensionStream},\
-        std::istream_iterator<std::string>());\
-aout << #s":\n";\
-for (auto& extension: extensionList) {\
-    aout << extension << "\n";\
-}\
-aout << std::endl;\
-}
-
-//! Color for cornflower blue. Can be sent directly to glClearColor
-#define CORNFLOWER_BLUE 100 / 255.f, 149 / 255.f, 237 / 255.f, 1
-
-// Vertex shader, you'd typically load this from assets
+ 
 static const char *vertex = R"vertex(#version 300 es
 // 入力頂点属性 - 明示的なロケーションを指定
 layout(location = 0) in vec3 inPosition;  // 頂点位置
@@ -331,10 +307,23 @@ void Renderer::initRenderer() {
     width_ = -1;
     height_ = -1;
 
-    PRINT_GL_STRING(GL_VENDOR);
-    PRINT_GL_STRING(GL_RENDERER);
-    PRINT_GL_STRING(GL_VERSION);
-    PRINT_GL_STRING_AS_LIST(GL_EXTENSIONS);
+    // Log basic GL strings (avoid undefined macro usage)
+    const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+    const char* glRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+    const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    aout << "GL_VENDOR: " << (glVendor ? glVendor : "unknown") << std::endl;
+    aout << "GL_RENDERER: " << (glRenderer ? glRenderer : "unknown") << std::endl;
+    aout << "GL_VERSION: " << (glVersion ? glVersion : "unknown") << std::endl;
+
+    // Print extensions using glGetStringi where available (GLES3)
+    GLint numExt = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &numExt);
+    aout << "GL_EXTENSIONS (" << numExt << "):";
+    for (GLint ei = 0; ei < numExt; ++ei) {
+        const char* ext = reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS, ei));
+        if (ext) aout << " " << ext;
+    }
+    aout << std::endl;
 
     // OpenGLのエラーをクリア
     GLenum err;
@@ -439,62 +428,122 @@ void Renderer::createModels() {
     // デバッグ用途: 当たり判定ワイヤーフレームを常に表示
     unitRenderer_->setShowCollisionWireframes(true);
     
-    // テスト用にいくつかのユニットを作成（異なる色と移動速度、戦闘パラメータを設定）
-    // UnitEntityとUnitStatsを使用してユニットを作成
-    auto unit1 = std::make_shared<UnitEntity>(1, "RedUnit", 
-                                             Position(0.0f, 2.0f), 
-                                             UnitStats(150, 150, 8, 12, 1.0f, 0.5f, 0.5f, 0.25f));  // 高火力・高HP・赤ユニット・攻撃速度1.5回/秒（攻撃力8～12）
+    // Try to load unit spawn configuration from assets/unit_spawns.json
+    bool loadedFromJson = false;
+    if (app_ && app_->activity && app_->activity->assetManager) {
+        AAssetManager* mgr = app_->activity->assetManager;
+        AAsset* asset = AAssetManager_open(mgr, "unit_spawns.json", AASSET_MODE_STREAMING);
+        if (asset) {
+            off_t size = AAsset_getLength(asset);
+            std::string content;
+            content.resize(size);
+            int read = AAsset_read(asset, &content[0], size);
+            AAsset_close(asset);
+            if (read > 0) {
+                try {
+                    auto root = mini_json::parseString(content);
+                    if (root && root->isObject()) {
+                        auto it = root->objectValue.find("units");
+                        if (it != root->objectValue.end() && it->second->isArray()) {
+                            auto& arr = it->second->arrayValue;
+                            for (auto& item : arr) {
+                                if (!item || !item->isObject()) continue;
+                                auto& obj = item->objectValue;
+                                int id = 0;
+                                std::string name = "Unit";
+                                float x = 0.0f, y = 0.0f;
+                                int faction = 0;
+                                int maxHp = 100, currentHp = 100, minAtk = 1, maxAtk = 1;
+                                float moveSpeed = 1.0f, attackSpeed = 1.0f, defense = 0.0f, collisionRadius = 0.25f;
+
+                                if (obj.find("id") != obj.end() && obj["id"]->isNumber()) id = static_cast<int>(obj["id"]->numberValue);
+                                if (obj.find("name") != obj.end() && obj["name"]->isString()) name = obj["name"]->stringValue;
+                                if (obj.find("x") != obj.end() && obj["x"]->isNumber()) x = static_cast<float>(obj["x"]->numberValue);
+                                if (obj.find("y") != obj.end() && obj["y"]->isNumber()) y = static_cast<float>(obj["y"]->numberValue);
+                                if (obj.find("faction") != obj.end() && obj["faction"]->isNumber()) faction = static_cast<int>(obj["faction"]->numberValue);
+
+                                auto sIt = obj.find("stats");
+                                if (sIt != obj.end() && sIt->second->isObject()) {
+                                    auto& sObj = sIt->second->objectValue;
+                                    if (sObj.find("maxHp") != sObj.end() && sObj["maxHp"]->isNumber()) maxHp = static_cast<int>(sObj["maxHp"]->numberValue);
+                                    if (sObj.find("currentHp") != sObj.end() && sObj["currentHp"]->isNumber()) currentHp = static_cast<int>(sObj["currentHp"]->numberValue);
+                                    if (sObj.find("minAttack") != sObj.end() && sObj["minAttack"]->isNumber()) minAtk = static_cast<int>(sObj["minAttack"]->numberValue);
+                                    if (sObj.find("maxAttack") != sObj.end() && sObj["maxAttack"]->isNumber()) maxAtk = static_cast<int>(sObj["maxAttack"]->numberValue);
+                                    if (sObj.find("moveSpeed") != sObj.end() && sObj["moveSpeed"]->isNumber()) moveSpeed = static_cast<float>(sObj["moveSpeed"]->numberValue);
+                                    if (sObj.find("attackSpeed") != sObj.end() && sObj["attackSpeed"]->isNumber()) attackSpeed = static_cast<float>(sObj["attackSpeed"]->numberValue);
+                                    if (sObj.find("defense") != sObj.end() && sObj["defense"]->isNumber()) defense = static_cast<float>(sObj["defense"]->numberValue);
+                                    if (sObj.find("collisionRadius") != sObj.end() && sObj["collisionRadius"]->isNumber()) collisionRadius = static_cast<float>(sObj["collisionRadius"]->numberValue);
+                                }
+
+                                UnitStats stats(maxHp, currentHp, minAtk, maxAtk, moveSpeed, attackSpeed, defense, collisionRadius);
+                                auto u = std::make_shared<UnitEntity>(id, name, Position(x, y), stats, faction);
+                                units_.push_back(u);
+
+                                if (faction == 1) unitRenderer_->registerUnitWithColor(u, 1.0f, 0.3f, 0.3f);
+                                else if (faction == 2) unitRenderer_->registerUnitWithColor(u, 0.3f, 0.3f, 1.0f);
+                                else unitRenderer_->registerUnitWithColor(u, 0.6f, 0.6f, 0.6f);
+                            }
+                            loadedFromJson = true;
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    aout << "Failed to parse unit_spawns.json: " << e.what() << std::endl;
+                }
+            }
+        }
+    }
+
+    if (!loadedFromJson) {
+        // Fallback: hardcoded spawn (keeps previous behaviour)
+        std::vector<std::shared_ptr<UnitEntity>> faction1Units;
+        std::vector<std::shared_ptr<UnitEntity>> faction2Units;
+
+        // 配置パターン（左右に分ける）
+        std::array<float,3> yOffsets = {1.5f, 0.0f, -1.5f};
+        int idCounter = 1;
+
+        for (int i = 0; i < 3; ++i) {
+            auto u = std::make_shared<UnitEntity>(idCounter++, "PlayerUnit" + std::to_string(i+1),
+                                                  Position(-2.0f, yOffsets[i]),
+                                                  UnitStats(120, 120, 6, 10, 1.0f, 0.6f, 0.5f, 0.25f),
+                                                  1); // faction 1
+            units_.push_back(u);
+            faction1Units.push_back(u);
+            unitRenderer_->registerUnitWithColor(u, 1.0f, 0.3f, 0.3f); // 赤
+        }
+
+        for (int i = 0; i < 3; ++i) {
+            auto u = std::make_shared<UnitEntity>(idCounter++, "EnemyUnit" + std::to_string(i+1),
+                                                  Position(2.0f, yOffsets[i]),
+                                                  UnitStats(100, 100, 4, 8, 1.0f, 0.7f, 0.4f, 0.25f),
+                                                  2); // faction 2
+            units_.push_back(u);
+            faction2Units.push_back(u);
+            unitRenderer_->registerUnitWithColor(u, 0.3f, 0.3f, 1.0f); // 青
+        }
+    }
     
-    auto unit2 = std::make_shared<UnitEntity>(2, "BlueUnit", 
-                                             Position(-1.0f, 0.0f), 
-                                             UnitStats(100, 100, 5, 9, 1.0f, 0.6f, 0.4f, 0.25f));  // 中火力・高防御・青ユニット・攻撃速度1回/秒（攻撃力5～9）
-    
-    auto unit3 = std::make_shared<UnitEntity>(3, "GreenUnit", 
-                                             Position(1.0f, 0.0f), 
-                                             UnitStats(80, 80, 3, 6, 1.0f, 0.8f, 0.6f, 0.25f));   // 低火力・高速・緑ユニット・攻撃速度2回/秒（攻撃力3～6）
-    
-    // ユニットをリストに追加
-    units_.push_back(unit1);
-    units_.push_back(unit2);
-    units_.push_back(unit3);
-    
-    // ユニットを鮮やかな色で登録（背景との対比を明確に）
-    unitRenderer_->registerUnitWithColor(unit1, 1.0f, 0.3f, 0.3f); // 明るい赤
-    unitRenderer_->registerUnitWithColor(unit2, 0.3f, 0.3f, 1.0f); // 明るい青
-    unitRenderer_->registerUnitWithColor(unit3, 0.3f, 1.0f, 0.3f); // 明るい緑
-    
-    // ユニット2と3は初期位置に固定（移動しない）
-    // unit2->setTargetPosition(0.0f, 0.0f);   // ユニット2は右（中央）に向かって移動
-    // unit3->setTargetPosition(0.0f, 0.0f);   // ユニット3は左（中央）に向かって移動
-    
-    // 現在の距離を計算
-    auto pos2 = unit2->getPosition();
-    auto pos3 = unit3->getPosition();
-    float dx = pos3.getX() - pos2.getX();
-    float dy = pos3.getY() - pos2.getY();
-    float distance = std::sqrt(dx * dx + dy * dy);
-    
-    // ちょうど良い戦闘距離を計算 (衝突半径×2 + 小さな余裕)
-    const float COLLISION_RADIUS = 0.1f; // UnitEntityの衝突半径
-    float combatDistance = COLLISION_RADIUS * 2.0f + 0.01f;
-    
-    // ログ出力で確認
-    aout << "Initial distance between units: " << distance << std::endl;
-    aout << "Combat distance: " << combatDistance << std::endl;
-    aout << "Collision radius: " << COLLISION_RADIUS << std::endl;
-    
-    // 正規化した方向ベクトル
-    float dirX = dx / distance;
-    float dirY = dy / distance;
-    
-    // ユニット2とユニット3は移動させない（初期位置に固定）
-    // unit2->setTargetPosition(unit3->getX() - dirX * (Unit::getCollisionRadius() * 1.8f), unit3->getY() - dirY * (Unit::getCollisionRadius() * 1.8f));
-    // unit3->setTargetPosition(unit2->getX() + dirX * (Unit::getCollisionRadius() * 1.8f), unit2->getY() + dirY * (Unit::getCollisionRadius() * 1.8f));
-    
-    aout << "Units initialized at fixed positions (distance: " << distance << ")" << std::endl;
+    // If we have at least 3 units, compute a sample distance between units[1] and units[2]
+    if (units_.size() >= 3 && units_[1] && units_[2]) {
+        auto pos2 = units_[1]->getPosition();
+        auto pos3 = units_[2]->getPosition();
+        float dx = pos3.getX() - pos2.getX();
+        float dy = pos3.getY() - pos2.getY();
+        float distance = std::sqrt(dx * dx + dy * dy);
+
+        // Compute a reasonable combat distance for logging
+        const float COLLISION_RADIUS = 0.1f;
+        float combatDistance = COLLISION_RADIUS * 2.0f + 0.01f;
+
+        aout << "Initial distance between sample units: " << distance << std::endl;
+        aout << "Combat distance: " << combatDistance << std::endl;
+        aout << "Collision radius: " << COLLISION_RADIUS << std::endl;
+    } else {
+        aout << "Not enough units to compute sample pair distance" << std::endl;
+    }
     
     aout << "Created " << units_.size() << " units" << std::endl;
-    aout << "Unit2 and Unit3 are fixed at their initial positions" << std::endl;
+    aout << "Spawned 2 factions with 3 units each" << std::endl;
     
     // MovementField を作成（ワールド座標 -5..5 x -5..5）
     movementField_ = std::make_unique<MovementField>(-5.0f, -5.0f, 5.0f, 5.0f);
@@ -708,15 +757,22 @@ void Renderer::moveUnitToPosition(float x, float y) {
             aout << "Failed to move " << tappedUnit->getName() << " to position (" << x << ", " << y << ")" << std::endl;
         }
     } else {
-        // 空の場所をタップした場合、Unit1（RedUnit）を移動
-        if (!units_.empty()) {
-            auto unit1 = units_[0];  // ユニット1は最初の要素
+        // 空の場所をタップした場合、プレイヤー陣営（faction == 1）の最初の生存ユニットのみを移動
+        std::shared_ptr<UnitEntity> firstPlayerUnit = nullptr;
+        for (const auto& unit : units_) {
+            if (unit && unit->getFaction() == 1 && unit->isAlive()) {
+                firstPlayerUnit = unit;
+                break;
+            }
+        }
+
+        if (firstPlayerUnit) {
             Position targetPos(x, y);
-            bool moveSuccess = movementUseCase_->moveUnitTo(unit1->getId(), targetPos);
+            bool moveSuccess = movementUseCase_->moveUnitTo(firstPlayerUnit->getId(), targetPos);
             if (moveSuccess) {
-                aout << "Moving " << unit1->getName() << " to empty space at (" << x << ", " << y << ") with collision avoidance" << std::endl;
+                aout << "Moving " << firstPlayerUnit->getName() << " to empty space at (" << x << ", " << y << ") with collision avoidance" << std::endl;
             } else {
-                aout << "Failed to move " << unit1->getName() << " to empty space at (" << x << ", " << y << ")" << std::endl;
+                aout << "Failed to move " << firstPlayerUnit->getName() << " to empty space at (" << x << ", " << y << ")" << std::endl;
             }
         }
     }
