@@ -11,6 +11,8 @@
         android:id="@+id/game_surface"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+    <!-- ゲームの SurfaceView のみを置くレイアウト。HUD はネイティブサーフェスを置き換えないよう
+         別レイアウトをオーバーレイとして追加します -->
 
     <!-- ユニットステータスパネル -->
     <LinearLayout

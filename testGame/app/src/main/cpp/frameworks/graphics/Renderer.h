@@ -111,6 +111,45 @@ private:
     std::unique_ptr<MovementUseCase> movementUseCase_;
     // Movement field for walkability and obstacles
     std::unique_ptr<class MovementField> movementField_;
+
+    // Camera / view offset (world coordinates). These allow panning the view.
+    float cameraOffsetX_ = 0.0f;
+    float cameraOffsetY_ = 0.0f;
+
+    // Smooth camera target and speed
+    float cameraTargetX_ = 0.0f;
+    float cameraTargetY_ = 0.0f;
+    // units per second camera speed
+    float cameraSpeed_ = 3.0f;
+
+    // accumulated elapsed time since renderer start (seconds)
+    float elapsedTime_ = 0.0f;
+
+    // Simple HUD button rectangles (screen coordinates) for camera control.
+    // Each button is represented as: x, y, width, height in pixels
+    struct ButtonRect { int x, y, w, h; };
+    ButtonRect btnUp_{0,0,0,0};
+    ButtonRect btnDown_{0,0,0,0};
+    ButtonRect btnLeft_{0,0,0,0};
+    ButtonRect btnRight_{0,0,0,0};
+
+    // HUD models drawn on top of everything
+    std::vector<Model> hudModels_;
+public:
+    // Expose some read-only getters so JNI/UI can query status
+    float getCameraOffsetX() const { return cameraOffsetX_; }
+    float getCameraOffsetY() const { return cameraOffsetY_; }
+    float getElapsedTime() const { return elapsedTime_; }
+    // Public wrapper to convert screen coordinates (pixels) to world/game coordinates
+    // Uses the existing private screenToWorldCoordinates implementation.
+    void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const {
+        screenToWorldCoordinates(screenX, screenY, worldX, worldY);
+    }
+    // Pan camera by dx, dy in world coordinates (adjusts camera target so smoothing applies)
+    void panCameraBy(float dx, float dy) {
+        cameraTargetX_ += dx;
+        cameraTargetY_ += dy;
+    }
 };
 
 #endif //ANDROIDGLINVESTIGATIONS_RENDERER_H

@@ -18,6 +18,10 @@
 
 // JNI関数の前方宣言
 extern "C" void setRendererReference(Renderer* renderer);
+
+// Ensure panCameraBy is available if not inlined in header (no-op if already provided)
+// (The method is implemented inline in Renderer.h; this symbol is here just in case of link expectations.)
+// No additional implementation required in the cpp file.
  
 static const char *vertex = R"vertex(#version 300 es
 // 入力頂点属性 - 明示的なロケーションを指定
@@ -147,6 +151,9 @@ void Renderer::render() {
         shaderNeedsNewProjectionMatrix_ = false;
     }
 
+    // 経過時間を蓄積
+    elapsedTime_ += deltaTime;
+
     // すでに設定した色で背景をクリア（initRendererで設定した色）
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -158,9 +165,30 @@ void Renderer::render() {
         0.0f, 0.0f, 0.0f, 1.0f
     };
     
-    // シェーダーがアクティブか確認し、モデル行列を設定
+    // シェーダーがアクティブか確認
     shader_->activate();
-    shader_->setModelMatrix(identityMatrix);
+
+    // Smoothly move cameraOffset towards cameraTarget each frame
+    // deltaTime was computed above; we clamp it earlier
+    // Interpolation: move by at most cameraSpeed_ * deltaTime toward target
+    float toX = cameraTargetX_ - cameraOffsetX_;
+    float toY = cameraTargetY_ - cameraOffsetY_;
+    float maxStep = cameraSpeed_ * deltaTime;
+    float dist = std::sqrt(toX * toX + toY * toY);
+    if (dist <= maxStep || dist == 0.0f) {
+        cameraOffsetX_ = cameraTargetX_;
+        cameraOffsetY_ = cameraTargetY_;
+    } else {
+        cameraOffsetX_ += toX / dist * maxStep;
+        cameraOffsetY_ += toY / dist * maxStep;
+    }
+
+    // Apply camera offset by translating the model matrix (view translation)
+    float modelMatrix[16];
+    for (int i = 0; i < 16; ++i) modelMatrix[i] = identityMatrix[i];
+    modelMatrix[12] = cameraOffsetX_;
+    modelMatrix[13] = cameraOffsetY_;
+    shader_->setModelMatrix(modelMatrix);
 
     // デバッグログ
     aout << "Begin rendering frame..." << std::endl;
@@ -226,12 +254,34 @@ void Renderer::render() {
         float deltaTime = 0.016f; // 仮の値: 60FPS想定で約16ms
         unitRenderer_->updateUnits(deltaTime);
         
-        // すべてのユニットを描画
-        unitRenderer_->render(shader_.get());
+    // すべてのユニットを描画（カメラオフセットを渡してユニットがワールド座標で描画されるようにする）
+    unitRenderer_->render(shader_.get(), cameraOffsetX_, cameraOffsetY_);
     } else {
         aout << "unitRenderer_ is null!" << std::endl;
     }
     
+    // Draw HUD models last so they appear on top (hudModels_ are in world coordinates but
+    // we temporarily neutralize the camera offset so they render at fixed screen positions)
+    if (!hudModels_.empty()) {
+        // Save current model matrix
+        float savedModel[16];
+        // identityMatrix variable still available in this scope
+        for (int i = 0; i < 16; ++i) savedModel[i] = identityMatrix[i];
+
+        // Set model matrix to identity (no camera offset) for HUD
+        shader_->setModelMatrix(savedModel);
+        for (const auto &m : hudModels_) {
+            shader_->drawModel(m);
+        }
+
+        // Restore camera model matrix
+        float camModel[16];
+        for (int i = 0; i < 16; ++i) camModel[i] = identityMatrix[i];
+        camModel[12] = cameraOffsetX_;
+        camModel[13] = cameraOffsetY_;
+        shader_->setModelMatrix(camModel);
+    }
+
     aout << "Frame rendering complete" << std::endl;
 
     // Present the rendered image. This is an implicit glFlush.
@@ -391,6 +441,16 @@ void Renderer::updateRenderArea() {
         // make sure that we lazily recreate the projection matrix before we render
         shaderNeedsNewProjectionMatrix_ = true;
     }
+
+    // Initialize HUD button rectangles (screen-space) at bottom-right corner
+    // Button size in pixels (square)
+    const int btnSize = 96;
+    const int padding = 16;
+    // Place a 2x2 grid in bottom-right: [Up] above [Down], [Left] left of [Right]
+    btnRight_ = { width_ - padding - btnSize, height_ - padding - btnSize, btnSize, btnSize };
+    btnLeft_  = { width_ - padding - 2*btnSize - 8, height_ - padding - btnSize, btnSize, btnSize };
+    btnUp_    = { width_ - padding - btnSize, height_ - padding - 2*btnSize - 8, btnSize, btnSize };
+    btnDown_  = { width_ - padding - btnSize, height_ - padding, btnSize, btnSize };
 }
 
 /**
@@ -544,32 +604,33 @@ void Renderer::createModels() {
     
     aout << "Created " << units_.size() << " units" << std::endl;
     aout << "Spawned 2 factions with 3 units each" << std::endl;
-    
-    // MovementField を作成（ワールド座標 -5..5 x -5..5）
-    movementField_ = std::make_unique<MovementField>(-5.0f, -5.0f, 5.0f, 5.0f);
-    // 視覚的にわかりやすい障害物を追加
-    movementField_->addCircleObstacle(Position(-1.5f, 0.5f), 0.5f);
-    movementField_->addCircleObstacle(Position(1.2f, -0.5f), 0.6f);
 
-    // 障害物を視覚化するために簡易的な円ポリゴンを models_ に追加（線で描画されるが目立つよう色をつける）
-    auto addCircleModel = [&](const Position& center, float radius, int segments, float r, float g, float b) {
-        std::vector<Vertex> verts;
-        std::vector<Index> inds;
-        verts.reserve(segments);
-        inds.reserve(segments);
-        for (int i = 0; i < segments; ++i) {
-            float theta = (2.0f * 3.14159265358979323846f * i) / segments;
-            float x = std::cos(theta) * radius + center.getX();
-            float y = std::sin(theta) * radius + center.getY();
-            verts.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
-            inds.push_back(static_cast<Index>(i));
-        }
-        auto tex = TextureAsset::createSolidColorTexture(r, g, b);
+    // MovementField を拡大（ワールド座標 -10..10 x -10..10）
+    movementField_ = std::make_unique<MovementField>(-10.0f, -10.0f, 10.0f, 10.0f);
+
+    // NOTE: Per request, we remove all circular obstacles from the field (no addCircleObstacle calls)
+    // この変更により、フィールド上の障害物は存在しません。
+
+    // HUD：カメラパン用の簡易ボタンモデルを追加します（画面右下に上下左右）
+    // ボタンは画面空間で判定するため、ここでは単純なワールド座標の四角を作成しておきます
+    auto addButtonModel = [&](float centerX, float centerY, float size, float r, float g, float b) {
+        float half = size * 0.5f;
+        std::vector<Vertex> verts = {
+            Vertex(Vector3{centerX + half, centerY + half, 0}, Vector2{1,0}),
+            Vertex(Vector3{centerX - half, centerY + half, 0}, Vector2{0,0}),
+            Vertex(Vector3{centerX - half, centerY - half, 0}, Vector2{0,1}),
+            Vertex(Vector3{centerX + half, centerY - half, 0}, Vector2{1,1})
+        };
+        std::vector<Index> inds = {0,1,2, 0,2,3};
+        auto tex = TextureAsset::createSolidColorTexture(r,g,b);
         models_.emplace_back(verts, inds, tex);
     };
 
-    addCircleModel(Position(-1.5f, 0.5f), 0.5f, 32, 1.0f, 0.3f, 0.3f); // 赤い障害物
-    addCircleModel(Position(1.2f, -0.5f), 0.6f, 32, 0.3f, 0.3f, 1.0f); // 青い障害物
+    // ワールド空間上に小さな四角を並べる（見た目用）
+    addButtonModel(3.5f, -3.5f, 0.6f, 0.8f, 0.8f, 0.8f); // placeholder for up/down/left/right group
+
+    // 実際の画面領域でのボタン矩形は updateRenderArea() 後に決定するので、Renderer.h の ButtonRect を使って
+    // handleInput 内でスクリーン座標判定を行います。
 
     // ユースケースを初期化（MovementField を注入）
     combatUseCase_ = std::make_unique<CombatUseCase>(units_);
@@ -629,10 +690,33 @@ void Renderer::handleInput() {
                 aout << "(" << pointer.id << ", " << x << ", " << y << ") "
                      << "Pointer Down";
                 {
-                    // タッチされた場所にユニットを移動
-                    float worldX, worldY;
-                    screenToWorldCoordinates(x, y, worldX, worldY);
-                    moveUnitToPosition(worldX, worldY);
+                    // まず、HUDボタン領域内のタップかをチェック
+                    bool handledByHud = false;
+                    if (x >= btnUp_.x && x <= btnUp_.x + btnUp_.w && y >= btnUp_.y && y <= btnUp_.y + btnUp_.h) {
+                        // 上へパン
+                        cameraOffsetY_ += 0.5f; handledByHud = true;
+                    } else if (x >= btnDown_.x && x <= btnDown_.x + btnDown_.w && y >= btnDown_.y && y <= btnDown_.y + btnDown_.h) {
+                        // 下へパン
+                        cameraOffsetY_ -= 0.5f; handledByHud = true;
+                    } else if (x >= btnLeft_.x && x <= btnLeft_.x + btnLeft_.w && y >= btnLeft_.y && y <= btnLeft_.y + btnLeft_.h) {
+                        // 左へパン
+                        cameraOffsetX_ -= 0.5f; handledByHud = true;
+                    } else if (x >= btnRight_.x && x <= btnRight_.x + btnRight_.w && y >= btnRight_.y && y <= btnRight_.y + btnRight_.h) {
+                        // 右へパン
+                        cameraOffsetX_ += 0.5f; handledByHud = true;
+                    }
+
+                    if (!handledByHud) {
+                        // タッチされた場所にユニットを移動（ワールド座標に変換）
+                        float worldX, worldY;
+                        screenToWorldCoordinates(x, y, worldX, worldY);
+                        // ワールド座標にカメラオフセットを適用して、実際にタップされたワールド位置を補正
+                        worldX += cameraOffsetX_;
+                        worldY += cameraOffsetY_;
+                        moveUnitToPosition(worldX, worldY);
+                    } else {
+                        aout << "HUD button handled - camera offset now (" << cameraOffsetX_ << ", " << cameraOffsetY_ << ")" << std::endl;
+                    }
                 }
                 break;
 
@@ -694,25 +778,34 @@ void Renderer::handleInput() {
 }
 
 void Renderer::screenToWorldCoordinates(float screenX, float screenY, float& worldX, float& worldY) const {
-    // 画面の幅と高さに基づいて座標変換
-    // 画面座標系: 左上が(0,0)、右下が(width,height)
-    // ワールド座標系: 中心が(0,0)、画面範囲は変わらないが、制限なし
-    
-    // スケールファクターを大きくして、より広い範囲を利用可能にする
-    // 投影行列のkProjectionHalfHeightと一致させる
-    const float WORLD_SCALE = 5.0f;
-    
-    // Xの変換: [0, width] -> [-WORLD_SCALE, WORLD_SCALE]
-    worldX = ((screenX / width_) * 2.0f - 1.0f) * WORLD_SCALE;
-    
-    // Yの変換: [0, height] -> [WORLD_SCALE, -WORLD_SCALE]（Y軸は反転）
-    worldY = (1.0f - (screenY / height_) * 2.0f) * WORLD_SCALE;
-    
-    // アスペクト比を考慮
-    float aspectRatio = static_cast<float>(width_) / height_;
-    worldX *= aspectRatio;
-    
-    aout << "Screen (" << screenX << ", " << screenY << ") -> World (" << worldX << ", " << worldY << ")" << std::endl;
+    // Convert screen pixel coords -> normalized device coords (NDC)
+    // screen: (0,0) top-left, (width_, height_) bottom-right
+    // NDC: x in [-1,1], y in [-1,1] with +y up
+    if (width_ <= 0 || height_ <= 0) {
+        worldX = 0.0f;
+        worldY = 0.0f;
+        return;
+    }
+
+    float ndcX = (screenX / static_cast<float>(width_)) * 2.0f - 1.0f;
+    float ndcY = 1.0f - (screenY / static_cast<float>(height_)) * 2.0f;
+
+    // Projection half extents defined by kProjectionHalfHeight and aspect
+    const float halfHeight = kProjectionHalfHeight; // e.g., 5.0f
+    const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
+    const float halfWidth = halfHeight * aspect;
+
+    // Inverse projection: map NDC back to world coordinates
+    float projWorldX = ndcX * halfWidth;
+    float projWorldY = ndcY * halfHeight;
+
+    // Account for camera/model translation applied during rendering
+    // During rendering, model matrix used: modelTranslation = position + cameraOffset
+    // Therefore, to recover world position before model translation, subtract camera offsets.
+    worldX = projWorldX - cameraOffsetX_;
+    worldY = projWorldY - cameraOffsetY_;
+
+    aout << "Screen (" << screenX << ", " << screenY << ") -> NDC (" << ndcX << ", " << ndcY << ") -> World (" << worldX << ", " << worldY << ")" << std::endl;
 }
 
 void Renderer::moveUnitToPosition(float x, float y) {

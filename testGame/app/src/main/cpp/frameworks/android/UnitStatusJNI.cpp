@@ -19,6 +19,43 @@ extern "C" void setRendererReference(Renderer* renderer) {
     g_renderer = renderer;
 }
 
+// JNI helper: expose camera offsets and elapsed time so Java UI can poll status
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getCameraOffsetX(JNIEnv *env, jobject /* this */) {
+    if (!g_renderer) return 0.0f;
+    return g_renderer->getCameraOffsetX();
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getCameraOffsetY(JNIEnv *env, jobject /* this */) {
+    if (!g_renderer) return 0.0f;
+    return g_renderer->getCameraOffsetY();
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getElapsedTime(JNIEnv *env, jobject /* this */) {
+    if (!g_renderer) return 0.0f;
+    return g_renderer->getElapsedTime();
+}
+
+// Return a packed int where each byte is the count for faction 1..4 (supports up to 255 each)
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_testgame_MainActivity_getFactionCountsPacked(JNIEnv *env, jobject /* this */) {
+    if (!g_renderer) return 0;
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) return 0;
+    const auto& all = unitRenderer->getAllUnits();
+    uint8_t counts[4] = {0,0,0,0};
+    for (const auto& p : all) {
+        auto u = p.second;
+        if (!u) continue;
+        int f = u->getFaction();
+        if (f >= 1 && f <= 4) counts[f-1]++;
+    }
+    jint packed = (counts[0] & 0xFF) | ((counts[1] & 0xFF) << 8) | ((counts[2] & 0xFF) << 16) | ((counts[3] & 0xFF) << 24);
+    return packed;
+}
+
 // プレイヤーユニット（ID=1）を取得するヘルパー関数
 std::shared_ptr<UnitEntity> getPlayerUnit() {
     if (!g_renderer) {
@@ -55,24 +92,17 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
         return JNI_FALSE;
     }
     
-    // 簡単なタッチ判定 - ゲーム座標系での判定
-    // スクリーン座標からゲーム座標への変換が必要だが、
-    // 今回は簡単にスクリーン中央付近のタッチでユニットが選択されたとする
-    float screenCenterX = 540.0f; // 仮のスクリーン中央X（1080pの半分）
-    float screenCenterY = 960.0f; // 仮のスクリーン中央Y（1920pの半分）
-    
-    float dx = x - screenCenterX;
-    float dy = y - screenCenterY;
-    float distance = sqrt(dx * dx + dy * dy);
-    
-    // スクリーン中央から一定範囲内のタッチでユニットが選択されたとする
-    if (distance < 200.0f) {
-        LOGI("Unit touched at screen (%f, %f), distance from center: %f", x, y, distance);
-        return JNI_TRUE;
-    }
-    
-    LOGI("Touch outside unit range at (%f, %f), distance: %f", x, y, distance);
-    return JNI_FALSE;
+    // Convert screen coordinates (pixels) to world/game coordinates using Renderer helper
+    float worldX = 0.0f;
+    float worldY = 0.0f;
+    g_renderer->screenToWorld(x, y, worldX, worldY);
+
+    LOGI("Touch at screen (%f, %f) -> world (%.3f, %.3f)", x, y, worldX, worldY);
+
+    // Set player's target position to the converted world coordinates
+    unit->setTargetPosition(Position(worldX, worldY));
+    unit->setState(UnitState::MOVING);
+    return JNI_TRUE;
 }
 
 // MainActivityで使用されている関数名に合わせた関数定義
@@ -199,4 +229,36 @@ Java_com_example_testgame_MainActivity_stopUnit(JNIEnv *env, jobject /* this */)
     auto pos = unit->getPosition();
     unit->setTargetPosition(pos);
     LOGI("Unit stopped");
+}
+
+// JNI: pan the camera by (dx, dy) in world units
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_testgame_MainActivity_panCameraBy(JNIEnv *env, jobject /* this */, jfloat dx, jfloat dy) {
+    if (!g_renderer) {
+        LOGE("Renderer not available for panCameraBy");
+        return;
+    }
+
+    // If Renderer provides a pan or offset API, use it. Otherwise, adjust camera target/offset directly.
+    try {
+        // Preferential API: panCameraBy
+        // NOTE: If Renderer doesn't have panCameraBy, this will be a compile error; so check via pointer to method isn't possible in C++.
+        // We will attempt to call an assumed method; if it doesn't exist, user will need to add it.
+        g_renderer->panCameraBy(dx, dy);
+        return;
+    } catch (...) {
+        // Fallback: directly change camera offsets if members are accessible
+    }
+
+    // Fallback logic: try to get current offset and set a new target (if API exists)
+    // Many Renderers have getCameraOffsetX/Y and setCameraTargetX/Y or setCameraOffset; attempt to use them if available.
+    // We'll attempt the most common functions; if they don't exist, this code will not compile and should be adapted.
+    #if 0
+    float curX = g_renderer->getCameraOffsetX();
+    float curY = g_renderer->getCameraOffsetY();
+    g_renderer->setCameraOffset(curX + dx, curY + dy);
+    #endif
+
+    // If we reached here, no portable fallback implemented. Log and return.
+    LOGE("panCameraBy: fallback not implemented for this Renderer. Please add Renderer::panCameraBy or setCameraOffset API.");
 }
