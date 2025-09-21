@@ -15,6 +15,10 @@ UnitRenderer::~UnitRenderer() {
     aout << "UnitRenderer destroyed" << std::endl;
 }
 
+void UnitRenderer::setShowAttackRanges(bool show) {
+    showAttackRanges_ = show;
+}
+
 void UnitRenderer::registerUnit(const std::shared_ptr<UnitEntity>& unit) {
     if (unit) {
         units_[unit->getId()] = unit;
@@ -161,6 +165,66 @@ void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float camer
     if (showCollisionWireframes_) {
         renderCollisionWireframes(shader, cameraOffsetX, cameraOffsetY);
     }
+
+    // 攻撃範囲の表示（最前面）
+    if (showAttackRanges_) {
+        renderAttackRanges(shader, cameraOffsetX, cameraOffsetY);
+    }
+}
+
+void UnitRenderer::renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
+    glDepthMask(GL_FALSE); // 深度書き込みオフ
+
+    const int segments = 48; // より滑らかな円
+
+    for (const auto& pair : units_) {
+        const auto& unit = pair.second;
+        if (!unit) continue;
+        if (!unit->isAlive()) continue; // 死亡ユニットの攻撃範囲は表示しない
+
+        float range = unit->getStats().getAttackRange();
+        if (range <= 0.0f) continue;
+
+        // 円頂点を生成
+        std::vector<Vertex> circleVertices;
+        circleVertices.reserve(segments);
+        std::vector<Index> circleIndices;
+        circleIndices.reserve(segments);
+
+        for (int i = 0; i < segments; ++i) {
+            float theta = (2.0f * 3.14159265358979323846f * i) / segments;
+            float x = std::cos(theta) * range;
+            float y = std::sin(theta) * range;
+            // テクスチャ座標は使用しないが必要なので 0,0 を設定
+            circleVertices.emplace_back(Vector3{ x, y, 0.0f }, Vector2{0,0});
+            circleIndices.push_back(static_cast<Index>(i));
+        }
+
+        // カラーは陣営ベースで薄い半透明（テクスチャは単色）
+        int faction = unit->getFaction();
+        float lr = 1.0f, lg = 1.0f, lb = 1.0f;
+        if (faction == 1) { lr = 1.0f; lg = 0.4f; lb = 0.4f; }
+        else if (faction == 2) { lr = 0.4f; lg = 0.4f; lb = 1.0f; }
+        else if (faction == 3) { lr = 0.4f; lg = 1.0f; lb = 0.4f; }
+
+        // 透明度を下げて目立ち過ぎないようにする（テクスチャ作成時にアルファ扱いは簡便化）
+        float alphaMultiplier = 0.35f;
+        auto rangeTexture = getColorTexture(lr * alphaMultiplier, lg * alphaMultiplier, lb * alphaMultiplier);
+        Model circleModel(circleVertices, circleIndices, rangeTexture);
+
+        // モデルマトリクスをユニット位置に設定（カメラオフセットを考慮）
+        float modelMatrix[16] = {0};
+        modelMatrix[0] = 1.0f; modelMatrix[5] = 1.0f; modelMatrix[10] = 1.0f; modelMatrix[15] = 1.0f;
+        auto position = unit->getPosition();
+        modelMatrix[12] = position.getX() + cameraOffsetX;
+        modelMatrix[13] = position.getY() + cameraOffsetY;
+
+        shader->setModelMatrix(modelMatrix);
+        // 描画は塗りつぶしにせずラインループで表示すると見やすい
+        shader->drawModelWithMode(circleModel, GL_LINE_LOOP);
+    }
+
+    glDepthMask(GL_TRUE);
 }
 
 void UnitRenderer::setShowCollisionWireframes(bool show) {

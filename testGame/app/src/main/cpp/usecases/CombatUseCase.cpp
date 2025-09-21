@@ -28,6 +28,11 @@ void CombatUseCase::executeAutoCombat() {
         }
 
         // 攻撃可能かどうか（攻撃速度によるクールダウンを尊重）
+        // Do not attack if the unit is currently moving; require it to be idle or already in combat.
+        if (unit->getState() == UnitState::MOVING) {
+            continue;
+        }
+
         if (!unit->canAttack(nowSec)) {
             continue;
         }
@@ -58,6 +63,11 @@ bool CombatUseCase::executeAttack(int attackerId, int targetId) {
     }
     
     // 攻撃範囲チェック
+    // Ensure attacker is not moving (must have completed movement) before allowing manual attack
+    if (attacker->getState() == UnitState::MOVING) {
+        return false;
+    }
+
     if (!CombatDomainService::isInAttackRange(*attacker, *target)) {
         return false; // 攻撃範囲外
     }

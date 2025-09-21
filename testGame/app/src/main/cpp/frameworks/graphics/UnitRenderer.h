@@ -102,6 +102,11 @@ public:
     void setShowCollisionWireframes(bool show);
 
     /**
+     * @brief Enable/disable attack range visualization
+     */
+    void setShowAttackRanges(bool show);
+
+    /**
      * @brief 当たり判定ワイヤーフレームを描画する
      */
     void renderCollisionWireframes(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
@@ -130,6 +135,10 @@ private:
 
     // 当たり判定ワイヤーフレームの表示フラグ
     bool showCollisionWireframes_ = false;
+    // 攻撃範囲表示フラグ
+    bool showAttackRanges_ = false;
+    // Render attack range visualization
+    void renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
 };
 
 #endif // TESTGAME_UNITRENDERER_H

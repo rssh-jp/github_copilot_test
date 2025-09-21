@@ -100,6 +100,9 @@ public:
      */
     bool isInAttackRange(const Position& targetPosition) const {
         float distance = position_.distanceTo(targetPosition);
+        // Note: when checking against a raw position we only compare to our own attack range.
+        // When checking against another UnitEntity, prefer the overload that takes a UnitEntity so
+        // that the target's collision radius can be considered.
         return distance <= stats_.getAttackRange();
     }
     
@@ -108,7 +111,12 @@ public:
      * @param other 攻撃対象のユニット
      */
     bool isInAttackRange(const UnitEntity& other) const {
-        return isInAttackRange(other.getPosition());
+        // Consider the target's collision radius: attacker can reach the target's body when
+        // distance <= attackRange + targetCollisionRadius
+        float dx = position_.getX() - other.getPosition().getX();
+        float dy = position_.getY() - other.getPosition().getY();
+        float distance = std::sqrt(dx * dx + dy * dy);
+        return distance <= (stats_.getAttackRange() + other.getStats().getCollisionRadius());
     }
     
     /**

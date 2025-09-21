@@ -223,14 +223,16 @@ void Renderer::render() {
                     float distance = std::sqrt(dx * dx + dy * dy);
                     
                     // 射程内チェック（どちらかのユニットの射程内に入っている場合）
-                    bool unit1InRange = distance <= unit1->getStats().getAttackRange();
-                    bool unit2InRange = distance <= unit2->getStats().getAttackRange();
+                    // Consider attack range plus the other's collision radius so attacker can reach
+                    bool unit1InRange = distance <= (unit1->getStats().getAttackRange() + unit2->getStats().getCollisionRadius());
+                    bool unit2InRange = distance <= (unit2->getStats().getAttackRange() + unit1->getStats().getCollisionRadius());
                     
                     // いずれかが射程内で、適切な状態の場合は戦闘開始
                     if ((unit1InRange || unit2InRange)) {
                         // ユニット1が射程内にいて、待機状態なら戦闘状態に移行
                         // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
-                        if (unit1InRange && unit1->getState() == UnitState::IDLE) {
+                        // Only enter combat if the unit has finished moving (is IDLE) or is already in COMBAT
+                        if (unit1InRange && (unit1->getState() == UnitState::IDLE || unit1->getState() == UnitState::COMBAT)) {
                             // TODO: UnitEntityには setCombatTarget メソッドがないため一時的にコメントアウト
                             // unit1->setCombatTarget(unit2);
                             unit1->setState(UnitState::COMBAT);
@@ -239,7 +241,7 @@ void Renderer::render() {
                         
                         // ユニット2が射程内にいて、待機状態なら戦闘状態に移行
                         // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
-                        if (unit2InRange && unit2->getState() == UnitState::IDLE) {
+                        if (unit2InRange && (unit2->getState() == UnitState::IDLE || unit2->getState() == UnitState::COMBAT)) {
                             // TODO: UnitEntityには setCombatTarget メソッドがないため一時的にコメントアウト
                             // unit2->setCombatTarget(unit1);
                             unit2->setState(UnitState::COMBAT);
@@ -487,6 +489,8 @@ void Renderer::createModels() {
     unitRenderer_ = std::make_unique<UnitRenderer>(bgTexture);
     // デバッグ用途: 当たり判定ワイヤーフレームを常に表示
     unitRenderer_->setShowCollisionWireframes(true);
+    // デバッグ用途: 攻撃範囲も表示
+    unitRenderer_->setShowAttackRanges(true);
     
     // Try to load unit spawn configuration from assets/unit_spawns.json
     bool loadedFromJson = false;

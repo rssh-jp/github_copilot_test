@@ -1,6 +1,7 @@
 #include "CombatDomainService.h"
 #include <algorithm>
 #include <cmath>
+#include "../android/AndroidOut.h"
 
 // 静的メンバの初期化
 std::random_device CombatDomainService::rd_;
@@ -11,9 +12,15 @@ CombatDomainService::CombatResult CombatDomainService::executeCombat(
     UnitEntity& attacker, UnitEntity& target) {
     
     // 攻撃範囲チェック
-    if (!isInAttackRange(attacker, target)) {
-        return CombatResult();
-    }
+        // Only execute combat when attacker is in attack-ready state (not moving) and
+        // the attacker is actually in range considering the target's collision radius.
+        if (attacker.getState() != UnitState::IDLE && attacker.getState() != UnitState::COMBAT) {
+            return CombatResult();
+        }
+
+        if (!isInAttackRange(attacker, target)) {
+            return CombatResult();
+        }
 
     // ダメージ計算
     int damage = calculateDamage(attacker.getStats(), target.getStats());
@@ -57,7 +64,15 @@ bool CombatDomainService::isInAttackRange(
     float dy = attacker.getPosition().getY() - target.getPosition().getY();
     float distance = std::sqrt(dx * dx + dy * dy);
     
-    return distance <= attacker.getStats().getAttackRange();
+    // Consider the target's collision radius: attacker can reach the target's body when
+    // distance <= attackerAttackRange + targetCollisionRadius
+    float effectiveRange = attacker.getStats().getAttackRange() + target.getStats().getCollisionRadius();
+    bool inRange = distance <= effectiveRange;
+    if (!inRange) {
+        aout << "isInAttackRange: attacker=" << attacker.getId() << " target=" << target.getId()
+             << " distance=" << distance << " effectiveRange=" << effectiveRange << std::endl;
+    }
+    return inRange;
 }
 
 bool CombatDomainService::isColliding(
