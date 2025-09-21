@@ -10,7 +10,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Reusable status board view. Allows configuring size, background color, text color and dynamic buttons.
+ * StatusBoardView - lightweight HUD component used by the Android overlay.
+ *
+ * Responsibilities:
+ * - Render short textual status and an optional row of buttons.
+ * - Keep UI concerns only; do not implement domain logic here. Callers should supply callbacks.
+ *
+ * API expectations:
+ * - setBoardSize expects dp units (converted to px internally).
+ * - configureButtons accepts label/id/callback tuples; callbacks are invoked on the UI thread.
  */
 class StatusBoardView @JvmOverloads constructor(
     context: Context,

@@ -1,4 +1,16 @@
 #include "CombatDomainService.h"
+
+/*
+ * CombatDomainService.cpp
+ *
+ * Purpose:
+ * - Provide stateless utility functions for combat-related domain checks and calculations.
+ * - Responsibilities include: damage calculation, range checks and simple combat helpers.
+ *
+ * Notes:
+ * - This module is intended to be deterministic and side-effect free (except optional debug logging).
+ * - Higher-level orchestration (when to call executeCombat) belongs to use-cases / systems.
+ */
 #include <algorithm>
 #include <cmath>
 #include "../android/AndroidOut.h"
@@ -10,50 +22,55 @@ std::uniform_real_distribution<float> CombatDomainService::dis_(0.8f, 1.2f);
 
 CombatDomainService::CombatResult CombatDomainService::executeCombat(
     UnitEntity& attacker, UnitEntity& target) {
-    
-    // 攻撃範囲チェック
-        // Only execute combat when attacker is in attack-ready state (not moving) and
-        // the attacker is actually in range considering the target's collision radius.
-        if (attacker.getState() != UnitState::IDLE && attacker.getState() != UnitState::COMBAT) {
-            return CombatResult();
-        }
+    /**
+     * Execute a single combat exchange between attacker and target.
+     *
+     * Preconditions / Guards:
+     *  - Attacker must be in a state that allows performing an attack (IDLE or COMBAT).
+     *  - Attacker must be within effective attack range (attacker.attackRange + target.collisionRadius).
+     *
+     * Behavior:
+     *  - Compute damage and apply it to the target.
+     *  - If the target survives and can counter-attack (in range), perform a counter-attack.
+     *  - Return a CombatResult summarizing damage and deaths.
+     */
+    // Guard conditions: attacker readiness
+    if (attacker.getState() != UnitState::IDLE && attacker.getState() != UnitState::COMBAT) {
+        return CombatResult();
+    }
 
-        if (!isInAttackRange(attacker, target)) {
-            return CombatResult();
-        }
+    // Guard conditions: effective range
+    if (!isInAttackRange(attacker, target)) {
+        return CombatResult();
+    }
 
-    // ダメージ計算
+    // Damage calculation and application
     int damage = calculateDamage(attacker.getStats(), target.getStats());
-    
-    // ダメージ適用
     target.takeDamage(damage);
-    
-    // 相手を倒したかチェック
+
+    // Check for death and potential counter-attack
     bool targetKilled = target.getStats().getCurrentHp() <= 0;
-    
-    // 反撃処理（相手が生きている場合のみ）
     bool attackerKilled = false;
     if (!targetKilled && isInAttackRange(target, attacker)) {
         int counterDamage = calculateDamage(target.getStats(), attacker.getStats());
         attacker.takeDamage(counterDamage);
         attackerKilled = attacker.getStats().getCurrentHp() <= 0;
     }
-    
+
     return CombatResult(damage, targetKilled, attackerKilled);
 }
 
 int CombatDomainService::getRandomAttackPower(const UnitStats& stats) {
+    // Return a uniformly random attack power between min and max (inclusive).
     if (stats.getMinAttackPower() == stats.getMaxAttackPower()) return stats.getMinAttackPower();
     return stats.getMinAttackPower() + (rand() % (stats.getMaxAttackPower() - stats.getMinAttackPower() + 1));
 }
 
 int CombatDomainService::calculateDamage(
     const UnitStats& attackerStats, const UnitStats& targetStats) {
-    // 基本ダメージ = 攻撃力（乱数）× ランダム補正
+    // Compute damage using attack power with a small random multiplier. This is intentionally
+    // simple; defense and other modifiers can be added here later.
     float baseDamage = getRandomAttackPower(attackerStats) * dis_(gen_);
-    // 将来的に防御力を実装する場合はここで計算
-    // float finalDamage = baseDamage - targetStats.defensePower;
-    // 最低1ダメージは与える
     return std::max(1, static_cast<int>(baseDamage));
 }
 
@@ -64,10 +81,10 @@ bool CombatDomainService::isInAttackRange(
     float dy = attacker.getPosition().getY() - target.getPosition().getY();
     float distance = std::sqrt(dx * dx + dy * dy);
     
-    // Consider the target's collision radius: attacker can reach the target's body when
-    // distance <= attackerAttackRange + targetCollisionRadius
+    // Effective range = attacker's attackRange + target's collision radius.
     float effectiveRange = attacker.getStats().getAttackRange() + target.getStats().getCollisionRadius();
     bool inRange = distance <= effectiveRange;
+    // Debug only when not in range to aid QA investigations without spamming logs.
     if (!inRange) {
         aout << "isInAttackRange: attacker=" << attacker.getId() << " target=" << target.getId()
              << " distance=" << distance << " effectiveRange=" << effectiveRange << std::endl;
@@ -82,7 +99,9 @@ bool CombatDomainService::isColliding(
     float dy = unit1.getPosition().getY() - unit2.getPosition().getY();
     float distance = std::sqrt(dx * dx + dy * dy);
     
-    // 2つのユニットの衝突半径の合計より近い場合は衝突
+    // Two units collide when the distance between centers is less than the sum of their
+    // collision radii (here using a symmetric getCollisionRadius helper). This is a
+    // conservative test suitable for simple circle-based collisions.
     float collisionDistance = getCollisionRadius() * 2.0f;
     return distance < collisionDistance;
 }

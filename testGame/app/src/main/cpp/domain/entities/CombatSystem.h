@@ -1,6 +1,18 @@
 #ifndef SIMULATION_GAME_COMBAT_SYSTEM_H
 #define SIMULATION_GAME_COMBAT_SYSTEM_H
 
+/*
+ * CombatSystem.h - encapsulates deterministic combat resolution logic.
+ *
+ * Responsibilities:
+ * - Execute a single combat interaction between two UnitEntity instances.
+ * - Compute damage amounts, resolve simultaneous damage and determine victory.
+ *
+ * Safety notes:
+ * - This class mutates UnitEntity state (enterCombat/exitCombat/takeDamage). Callers should
+ *   perform validation (alive checks, faction checks) before invoking executeCombat.
+ */
+
 #include "UnitEntity.h"
 #include <memory>
 #include <vector>

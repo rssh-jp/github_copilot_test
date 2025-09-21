@@ -7,6 +7,27 @@
 #include "graphics/UnitRenderer.h"
 #include "entities/UnitEntity.h"
 
+/*
+ * UnitStatusJNI.cpp
+ *
+ * JNI bridge between Android UI (Kotlin) and native engine state.
+ *
+ * Responsibilities:
+ * - Expose read-only accessors for unit state (position, HP, stats) and renderer state (camera offset).
+ * - Provide touch handling entry point that translates screen coords to world coords and performs hit-tests.
+ *
+ * Threading / safety notes:
+ * - JNI calls may be invoked on the UI thread; ensure any interaction with renderer or game state is
+ *   safe for the current threading model. Where necessary, marshal requests to the render thread.
+ */
+#include <string>
+#include <android/log.h>
+#include <cmath>
+#include <cstdlib>
+#include "graphics/Renderer.h"
+#include "graphics/UnitRenderer.h"
+#include "entities/UnitEntity.h"
+
 #define TAG "UnitStatusJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
@@ -22,6 +43,11 @@ static int g_persistSelectedUnitId = -1;
 extern "C" void setRendererReference(Renderer* renderer) {
     g_renderer = renderer;
 }
+
+/**
+ * JNI accessor: getCameraOffsetX/Y, getElapsedTime などは UI 側から定期的にポーリングされます。
+ * これらは単純に Renderer のアクセサを呼ぶだけで副作用はありません。
+ */
 
 // JNI helper: expose camera offsets and elapsed time so Java UI can poll status
 extern "C" JNIEXPORT jfloat JNICALL
@@ -108,7 +134,10 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
         return JNI_FALSE;
     }
     
-    // Convert screen coordinates (pixels) to world/game coordinates using Renderer helper
+    // Convert screen coordinates (pixels) to world/game coordinates using Renderer helper.
+    // NOTE: This JNI entrypoint is often invoked on the UI thread; position calculations and
+    // hit-tests are performed synchronously here. If renderer or unit lists are mutated on
+    // another thread, callers must ensure proper synchronization (not handled here).
     float worldX = 0.0f;
     float worldY = 0.0f;
     g_renderer->screenToWorld(x, y, worldX, worldY);
@@ -154,6 +183,11 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
     return JNI_FALSE; // indicate no selection (move issued)
 }
 
+/**
+ * JNI: UI 側が選択中のユニット名を取得するために呼び出します。
+ * 戻り値が空文字列の場合は「選択なし」を意味します。
+ */
+
 // MainActivityで使用されている関数名に合わせた関数定義
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_testgame_MainActivity_getUnitName(JNIEnv *env, jobject /* this */) {
@@ -165,6 +199,11 @@ Java_com_example_testgame_MainActivity_getUnitName(JNIEnv *env, jobject /* this 
     }
     return env->NewStringUTF(unit->getName().c_str());
 }
+
+/**
+ * JNI: 選択中のユニットのステータス文字列（IDLE/MOVING/COMBAT）を返します。
+ * UI のセンターダイアログで使用されます。
+ */
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getCurrentHp(JNIEnv *env, jobject /* this */) {
@@ -257,6 +296,11 @@ Java_com_example_testgame_MainActivity_getUnitStatusString(JNIEnv *env, jobject 
     }
 }
 
+/**
+ * JNI: UI がセンターダイアログを閉じたときに永続選択をクリアします。
+ * 明示的に呼ばれるまで UI は同じユニットを表示し続けます。
+ */
+
 // Clear persisted selection - callable from Java when user closes the dialog
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_testgame_MainActivity_clearPersistSelectedUnit(JNIEnv *env, jobject /* this */) {
@@ -281,6 +325,11 @@ Java_com_example_testgame_MainActivity_moveUnit(JNIEnv *env, jobject /* this */)
     unit->setState(UnitState::MOVING);
     LOGI("Unit moving to (%f, %f)", x, y);
 }
+
+/**
+ * JNI: UI 上のボタンやデバッグ用にユニットの停止を命令します。
+ * プレイヤーユニットの targetPosition を現在位置へ設定し、状態を IDLE にします。
+ */
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_testgame_MainActivity_stopUnit(JNIEnv *env, jobject /* this */) {
@@ -328,4 +377,20 @@ Java_com_example_testgame_MainActivity_panCameraBy(JNIEnv *env, jobject /* this 
 
     // If we reached here, no portable fallback implemented. Log and return.
     LOGE("panCameraBy: fallback not implemented for this Renderer. Please add Renderer::panCameraBy or setCameraOffset API.");
+}
+
+// JNI: toggle attack range visualization in UnitRenderer. Called from UI toggle switch.
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_testgame_MainActivity_setShowAttackRanges(JNIEnv *env, jobject /* this */, jboolean show) {
+    if (!g_renderer) {
+        LOGE("setShowAttackRanges: renderer not available");
+        return;
+    }
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) {
+        LOGE("setShowAttackRanges: unitRenderer not available");
+        return;
+    }
+    unitRenderer->setShowAttackRanges(show == JNI_TRUE);
+    LOGI("setShowAttackRanges called: %d", (int)show);
 }

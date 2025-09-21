@@ -17,6 +17,15 @@ void MovementUseCase::setMovementFailedCallback(MovementFailedCallback callback)
 }
 
 bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
+    /**
+     * Move the specified unit towards targetPosition.
+     * Behavior:
+     * - Validates unit existence and liveliness.
+     * - If a MovementField is configured, snaps the target inside the field and validates walkability.
+     * - Calculates an avoidance-aware actual target using CollisionDomainService and sets the unit's
+     *   targetPosition accordingly.
+     * - Emits movementEventCallback_ with the from/to positions when movement is started.
+     */
     auto unit = findUnitById(unitId);
     if (!unit) {
         return false; // ユニットが見つからない
@@ -63,6 +72,13 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
 }
 
 void MovementUseCase::updateMovements(float deltaTime) {
+    /**
+     * Update movement for all units.
+     *
+     *  - 各ユニットについて次フレームでの位置を予測し、他ユニットとの接触を検出します。
+     *  - 接触が予測される場合はバックオフや停止処理を行い、衝突を回避します。
+     *  - 問題がなければ UnitEntity::updateMovement(deltaTime) を呼んで実際の移動を行います。
+     */
     for (auto& unit : units_) {
         if (unit->getStats().getCurrentHp() <= 0) {
             continue; // 死亡ユニットは移動しない
@@ -143,6 +159,10 @@ void MovementUseCase::updateMovements(float deltaTime) {
 }
 
 Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float deltaTime) const {
+    /**
+     * Calculate next position for the given unit assuming movement for deltaTime seconds.
+     * This is deterministic and side-effect free: it does not mutate the unit.
+     */
     Position currentPos = unit.getPosition();
     Position targetPos = unit.getTargetPosition();
 
@@ -192,11 +212,13 @@ bool MovementUseCase::canMoveToPosition(int unitId, const Position& targetPositi
     auto otherUnits = getOtherUnits(*unit);
 
     // MovementField がある場合はフィールド上で歩行可能かチェック
+    // If a movement field exists, snap and validate walkability first.
     if (movementField_) {
         Position snapped = movementField_->snapInside(targetPosition);
         if (!movementField_->isWalkable(snapped, unit->getStats().getCollisionRadius())) return false;
     }
 
+    // Delegate detailed collision/path checks to CollisionDomainService.
     return CollisionDomainService::canMoveTo(*unit, targetPosition, otherUnits);
 }
 

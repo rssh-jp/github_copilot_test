@@ -3,6 +3,26 @@
 #include "../domain/services/CollisionDomainService.h"
 #include <cmath>
 
+/*
+ * UnitRenderer.cpp
+ *
+ * Responsibilities:
+ * - Visualize UnitEntity instances: model, HP bars, debug wireframes (collision / attack ranges).
+ * - Provide a registration API for units and lightweight per-frame update/render calls.
+ *
+ * Notes:
+ * - Keep rendering logic here; do not move game rules into rendering code. The renderer may read
+ *   domain state but must not mutate business logic.
+ */
+#include "android/AndroidOut.h"
+#include "../domain/services/CollisionDomainService.h"
+#include <cmath>
+
+/**
+ * @brief コンストラクタ
+ *
+ * @param spTexture ユニット描画に使うデフォルトテクスチャ（nullptr でも可）
+ */
 UnitRenderer::UnitRenderer(std::shared_ptr<TextureAsset> spTexture)
     : spTexture_(spTexture)
     , unitModel_(createUnitModel()) {
@@ -15,10 +35,21 @@ UnitRenderer::~UnitRenderer() {
     aout << "UnitRenderer destroyed" << std::endl;
 }
 
+/**
+ * @brief 攻撃範囲表示フラグを設定します。
+ *
+ * デバッグ目的のビジュアルで、ユニット周囲に攻撃範囲の円を描画するか制御します。
+ */
 void UnitRenderer::setShowAttackRanges(bool show) {
     showAttackRanges_ = show;
 }
 
+/**
+ * @brief ユニットをレンダラーに登録します。
+ *
+ * 登録後は render()/updateUnits() の対象となり、内部でユニットに対応するテクスチャが
+ * 設定されます。
+ */
 void UnitRenderer::registerUnit(const std::shared_ptr<UnitEntity>& unit) {
     if (unit) {
         units_[unit->getId()] = unit;
@@ -72,6 +103,12 @@ std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g, fl
     return texture;
 }
 
+/**
+ * @brief 全ユニットを描画します。
+ *
+ * 各ユニットの状態に応じてテクスチャや色を変え、モデル描画とHPバー描画を行います。
+ * 描画順序: ユニット本体 -> HPバー -> (最後に) ワイヤーフレーム / 攻撃範囲
+ */
 void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
     for (const auto& pair : units_) {
         const auto& unitId = pair.first;
@@ -172,6 +209,11 @@ void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float camer
     }
 }
 
+/**
+ * @brief 各ユニットの攻撃範囲を円で描画します（デバッグ表示）。
+ *
+ * カメラオフセットを考慮して、ユニットのワールド位置に円を配置します。
+ */
 void UnitRenderer::renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
     glDepthMask(GL_FALSE); // 深度書き込みオフ
 
@@ -231,6 +273,11 @@ void UnitRenderer::setShowCollisionWireframes(bool show) {
     showCollisionWireframes_ = show;
 }
 
+/**
+ * @brief 各ユニットの当たり判定（collision radius）をワイヤーフレームで描画します。
+ *
+ * デバッグ用途。描画は GL_LINE_LOOP で行われ、深度書き込みをオフにして最前面に表示します。
+ */
 void UnitRenderer::renderCollisionWireframes(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
     // 深度を最前面に表示するために深度書き込みを無効化
     glDepthMask(GL_FALSE); // 深度書き込みオフ
@@ -286,6 +333,12 @@ void UnitRenderer::renderCollisionWireframes(const Shader* shader, float cameraO
     glDepthMask(GL_TRUE); // 深度書き込みを元に戻す
 }
 
+/**
+ * @brief ユニットの表示ロジックの更新を行います。
+ *
+ * 現状は移動更新（updateMovement）を呼び出し、将来的に衝突回避や攻撃の視覚的更新をここで
+ * 行う設計です。ビジネスロジック（ダメージ計算等）は UseCase 層で扱うべきです。
+ */
 void UnitRenderer::updateUnits(float deltaTime) {
     // すべてのユニットのリストを作成
     std::vector<std::shared_ptr<UnitEntity>> unitList;
@@ -355,6 +408,11 @@ void UnitRenderer::updateUnits(float deltaTime) {
     }
 }
 
+/**
+ * @brief 指定ユニットのHPバーを描画します。
+ *
+ * バーはユニットの上に固定され、HP割合に応じて色と幅が変化します。
+ */
 void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitEntity>& unit, float cameraOffsetX, float cameraOffsetY) {
     // HP表示用のバーを描画する
     // バーの設定
@@ -452,6 +510,11 @@ void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitE
     // この実装ではHP表示はバーのみにしています。
 }
 
+/**
+ * @brief ユニット描画に使用する基本モデルを生成します。
+ *
+ * ここでは4頂点の単純な四角形を返し、ユニットごとにテクスチャを適用して描画します。
+ */
 Model UnitRenderer::createUnitModel() {
     // ユニットのサイズを1/4程度に小さく調整
     // 0 --- 1
@@ -480,6 +543,9 @@ Model UnitRenderer::createUnitModel() {
     return Model(vertices, indices, redTexture);
 }
 
+/**
+ * @brief 登録済みユニットをIDで取得します。
+ */
 std::shared_ptr<UnitEntity> UnitRenderer::getUnit(int unitId) const {
     auto it = units_.find(unitId);
     if (it != units_.end()) {
@@ -488,6 +554,9 @@ std::shared_ptr<UnitEntity> UnitRenderer::getUnit(int unitId) const {
     return nullptr;
 }
 
+/**
+ * @brief すべての登録ユニットを返します（参照返し）。
+ */
 const std::unordered_map<int, std::shared_ptr<UnitEntity>>& UnitRenderer::getAllUnits() const {
     return units_;
 }

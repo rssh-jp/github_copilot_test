@@ -1,6 +1,16 @@
 #ifndef SIMULATION_GAME_COMBAT_USECASE_H
 #define SIMULATION_GAME_COMBAT_USECASE_H
 
+/*
+ * CombatUseCase.h
+ *
+ * Public API for higher-level combat orchestration used by game loop / AI.
+ *
+ * Contract:
+ * - Caller provides a reference to the in-memory unit list that this use-case will operate on.
+ * - All returned UnitEntity pointers are non-owning references to objects managed elsewhere.
+ */
+
 #include "../domain/entities/UnitEntity.h"
 #include "../domain/services/CombatDomainService.h"
 #include <vector>

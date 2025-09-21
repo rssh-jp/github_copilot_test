@@ -5,6 +5,16 @@ import android.view.View
 import com.google.androidgamesdk.GameActivity
 
 /**
+ * MainActivity overview:
+ * - Hosts the native GL surface provided by GameActivity and adds an Android overlay for HUD and
+ *   controls via addContentView. The native renderer keeps ownership of the GL surface.
+ * - UI periodically polls native state over JNI (camera offsets, unit info). Polling is intentionally
+ *   lightweight (250ms) to avoid excessive JNI crossing.
+ * - UI dispatches user commands (move/stop/pan) via simple JNI entrypoints. UI should remain thin and
+ *   avoid embedding game logic; domain rules live in the native layers.
+ */
+
+/**
  * GameActivity専用のメインアクティビティ
  * ネイティブレンダリングによる2Dシミュレーションゲーム
  */
@@ -41,6 +51,8 @@ class MainActivity : GameActivity() {
     private external fun stopUnit()
     // JNI Native functions - Camera pan commands (delta in world units)
     private external fun panCameraBy(dx: Float, dy: Float)
+    // JNI: toggle native attack-range visualization
+    private external fun setShowAttackRanges(show: Boolean)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -176,6 +188,20 @@ class MainActivity : GameActivity() {
         }
         btnRight.setOnClickListener {
             panCameraBy(panAmount, 0.0f)
+        }
+
+        // Wire the attack-range toggle switch in the status board (if present)
+        try {
+            val rangeSwitch = overlay.findViewById<android.widget.Switch>(R.id.switch_attack_range)
+            rangeSwitch?.setOnCheckedChangeListener { _, isChecked ->
+                try {
+                    setShowAttackRanges(isChecked)
+                } catch (e: Throwable) {
+                    // ignore JNI failures
+                }
+            }
+        } catch (e: Throwable) {
+            // ignore if switch not found or APIs missing
         }
 
         // Forward touches on the overlay (outside of buttons) to native onTouch with raw screen coordinates

@@ -110,6 +110,12 @@ public:
      * @brief 当たり判定ワイヤーフレームを描画する
      */
     void renderCollisionWireframes(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
+    /**
+     * @brief 攻撃範囲（attack range）を描画する
+     *
+     * デバッグ／ビジュアル目的で、各ユニットの攻撃範囲を円として描画します。
+     */
+    void renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
 
 private:
     // ユニットのモデルデータを生成する
@@ -137,8 +143,7 @@ private:
     bool showCollisionWireframes_ = false;
     // 攻撃範囲表示フラグ
     bool showAttackRanges_ = false;
-    // Render attack range visualization
-    void renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
+    // Render attack range visualization (declaration is public above)
 };
 
 #endif // TESTGAME_UNITRENDERER_H

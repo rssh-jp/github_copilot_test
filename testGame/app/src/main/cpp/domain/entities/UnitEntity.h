@@ -1,6 +1,20 @@
 #ifndef SIMULATION_GAME_UNIT_ENTITY_H
 #define SIMULATION_GAME_UNIT_ENTITY_H
 
+/*
+ * UnitEntity.h - Domain entity representing a game unit.
+ *
+ * Responsibilities:
+ * - Encapsulate unit identity, position, stats and transient state (IDLE/MOVING/COMBAT/DEAD).
+ * - Provide query helpers used by use-cases and systems (isAlive, canMove, canAttack, isInAttackRange).
+ *
+ * Invariants / Notes:
+ * - Position and targetPosition are in world coordinates.
+ * - Range checks may consider both attack range and target collision radius (see overloads).
+ * - This file contains only pure domain logic; side-effects (IO, rendering) must not be added here.
+ */
+#define SIMULATION_GAME_UNIT_ENTITY_H
+
 #include "../value_objects/Position.h"
 #include "../value_objects/UnitStats.h"
 #include <string>
@@ -81,6 +95,13 @@ public:
 
     // 攻撃処理: 攻撃可能なら攻撃し、lastAttackTime_を更新
     bool tryAttack(UnitEntity& target, float nowTime) {
+        /**
+         * Attempt an attack on target at nowTime.
+         * Pre-conditions:
+         * - caller is responsible for ensuring attacker and target are valid and alive.
+         * - this method enforces attack cooldown and range checks.
+         * Returns true if an attack was performed and damage applied.
+         */
         if (!canAttack(nowTime)) return false;
         if (!isInAttackRange(target)) return false;
         lastAttackTime_ = nowTime;
@@ -147,7 +168,10 @@ public:
         
         targetPosition_ = newTarget;
         
-        // 目標位置に到達していない場合は移動状態に
+        /**
+         * Set a new movement target for this unit.
+         * If the new target differs from current position, the unit enters MOVING state.
+         */
         if (position_ != targetPosition_) {
             state_ = UnitState::MOVING;
         } else {
@@ -181,9 +205,11 @@ public:
         
         // 目標位置に向かって移動
         float distance = position_.distanceTo(targetPosition_);
-        const float ARRIVAL_THRESHOLD = 0.05f; // 到着判定の閾値
+    // Use a named constexpr for arrival threshold so behavior is easy to tune.
+    // This value represents world units within which the unit is considered to have arrived.
+    static constexpr float kArrivalThreshold = 0.05f; // 到着判定の閾値
         
-        if (distance > ARRIVAL_THRESHOLD) {
+    if (distance > kArrivalThreshold) {
             // 移動方向を計算
             float dx = targetPosition_.getX() - position_.getX();
             float dy = targetPosition_.getY() - position_.getY();

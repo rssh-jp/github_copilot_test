@@ -1,5 +1,18 @@
 #include "Renderer.h"
 
+/*
+ * Renderer.cpp - engine-level rendering loop and scene orchestration.
+ *
+ * Responsibilities:
+ * - Manage GL context, projection/model matrices and present frames.
+ * - Coordinate use-cases (movement/combat updates) and call renderers (UnitRenderer, models).
+ * - Maintain camera offsets and expose them via JNI for UI overlays to query.
+ *
+ * Notes:
+ * - This file mixes platform-specific GL initialization (EGL) and high-level scene orchestration.
+ * - Performance-sensitive: avoid heavy allocations per-frame.
+ */
+
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <GLES3/gl3.h>
 #include <memory>
@@ -102,6 +115,13 @@ Renderer::~Renderer() {
     }
 }
 
+/**
+ * 描画ループの1フレーム分を実行します。
+ *
+ * この関数はゲームロジック（movement/combat のアップデート）をトリガーし、
+ * プロジェクションの更新、シェーダの準備、シーンの描画（背景、ユニット、HUD）を順に行います。
+ * 副作用として cameraOffset_ の滑らかな補間や elapsedTime_ の増分、ユニットの状態遷移を行います。
+ */
 void Renderer::render() {
     // フレーム時間の計算（簡易的な実装）
     static auto lastTime = std::chrono::high_resolution_clock::now();
@@ -664,6 +684,14 @@ void Renderer::createModels() {
     });
 }
 
+/**
+ * 入力キューを読み取り、タッチやキーイベントを処理します。
+ *
+ * 具体的には HUD ボタンによるカメラパン判定、タップ位置のワールド座標変換、
+ * moveUnitToPosition 呼び出し（ユニット選択／移動）を行います。
+ *
+ * 注意: この関数は inputBuffer を消費するため、呼び出し元は別途同入力を参照しません。
+ */
 void Renderer::handleInput() {
     // handle all queued inputs
     auto *inputBuffer = android_app_swap_input_buffers(app_);
@@ -781,6 +809,17 @@ void Renderer::handleInput() {
     android_app_clear_key_events(inputBuffer);
 }
 
+/**
+ * スクリーン（ピクセル）座標をワールド座標へ変換します。
+ *
+ * @param screenX スクリーンX（px）
+ * @param screenY スクリーンY（px）
+ * @param worldX 変換後のワールドX（参照返し）
+ * @param worldY 変換後のワールドY（参照返し）
+ *
+ * 実装は現在のプロジェクション設定（kProjectionHalfHeight とアスペクト比）を使い、
+ * カメラオフセットを差し引いてワールド座標を復元します。
+ */
 void Renderer::screenToWorldCoordinates(float screenX, float screenY, float& worldX, float& worldY) const {
     // Convert screen pixel coords -> normalized device coords (NDC)
     // screen: (0,0) top-left, (width_, height_) bottom-right
@@ -812,6 +851,17 @@ void Renderer::screenToWorldCoordinates(float screenX, float screenY, float& wor
     aout << "Screen (" << screenX << ", " << screenY << ") -> NDC (" << ndcX << ", " << ndcY << ") -> World (" << worldX << ", " << worldY << ")" << std::endl;
 }
 
+/**
+ * 指定したワールド座標にユニットを移動させるためのユースケース呼び出しを行います。
+ *
+ * 処理の流れ:
+ *  - まず座標近傍のユニットをヒット判定（簡易ヒットボックス）で検索
+ *  - ユニットが見つかればそのユニットを移動させる。見つからなければプレイヤー陣営の
+ *    最初の生存ユニットを移動させる
+ *
+ * @param x ワールドX
+ * @param y ワールドY
+ */
 void Renderer::moveUnitToPosition(float x, float y) {
     if (units_.empty() || !unitRenderer_ || !movementUseCase_) {
         return;
@@ -875,6 +925,7 @@ void Renderer::moveUnitToPosition(float x, float y) {
     }
 }
 
+// 単純なアクセサ実装（借用ポインタを返す）
 UnitRenderer* Renderer::getUnitRenderer() const {
     return unitRenderer_.get();
 }
