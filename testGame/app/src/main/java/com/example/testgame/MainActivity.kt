@@ -51,8 +51,8 @@ class MainActivity : GameActivity() {
         )
         addContentView(overlay, params)
 
-        // Start a periodic UI updater to poll native state and update the status HUD
-        val statusHud = overlay.findViewById<android.widget.TextView>(R.id.status_hud)
+    // Start a periodic UI updater to poll native state and update the status board
+    val statusBoard = overlay.findViewById<com.example.testgame.StatusBoardView>(R.id.status_board)
         val handler = android.os.Handler(mainLooper)
         val updateTask = object : Runnable {
             override fun run() {
@@ -67,7 +67,7 @@ class MainActivity : GameActivity() {
                     val f3 = (packed shr 16) and 0xFF
                     val f4 = (packed shr 24) and 0xFF
                     val text = String.format("Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs", camX, camY, f1, f2, f3, f4, elapsed)
-                    statusHud.text = text
+                    statusBoard.setText(text)
                 } catch (e: Throwable) {
                     // ignore
                 }
@@ -75,6 +75,18 @@ class MainActivity : GameActivity() {
             }
         }
         handler.postDelayed(updateTask, 250)
+
+        // Configure the status board appearance and buttons. Caller can change these at runtime.
+        statusBoard.setBoardSize(200, 120) // dp units
+        statusBoard.setBackgroundColorHex("#66000000")
+        statusBoard.setTextColorHex("#FFFFFFFF")
+
+        // Example: dynamic buttons - only Close, OK, NG
+        statusBoard.configureButtons(
+            Triple("閉じる", View.generateViewId()) { /* close */ },
+            Triple("OK", View.generateViewId()) { /* ok */ },
+            Triple("NG", View.generateViewId()) { /* ng */ }
+        )
 
         // Attach listeners to simple black pan buttons so user can see and use them
         val btnUp = overlay.findViewById<View>(R.id.button_pan_up)
