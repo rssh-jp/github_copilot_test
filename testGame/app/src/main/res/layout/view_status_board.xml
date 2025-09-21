@@ -35,12 +35,20 @@
 
         </RelativeLayout>
 
+        <!-- Spacer to push buttons to the bottom of the status panel -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
         <LinearLayout
             android:id="@+id/status_board_buttons"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="9dp" />
+            android:layout_marginTop="9dp"
+            android:gravity="center_horizontal">
+        </LinearLayout>
     </LinearLayout>
 
 </merge>

@@ -58,6 +58,10 @@ void UnitRenderer::registerUnit(const std::shared_ptr<UnitEntity>& unit) {
         unitTextures_[unit->getId()] = getColorTexture(1.0f, 0.0f, 0.0f);
         
         aout << "Registered unit: " << unit->getName() << " (ID: " << unit->getId() << ")" << std::endl;
+        // 保存された初期位置がなければ記録する
+        if (trackInitialPositions_) {
+            initialPositions_[unit->getId()] = unit->getPosition();
+        }
     }
 }
 
@@ -85,6 +89,7 @@ void UnitRenderer::clearAllUnits() {
     aout << "Clearing all units. Total units: " << units_.size() << std::endl;
     units_.clear();
     unitTextures_.clear();
+    initialPositions_.clear();
 }
 
 std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g, float b) {
@@ -559,4 +564,38 @@ std::shared_ptr<UnitEntity> UnitRenderer::getUnit(int unitId) const {
  */
 const std::unordered_map<int, std::shared_ptr<UnitEntity>>& UnitRenderer::getAllUnits() const {
     return units_;
+}
+
+// Helper to move units to random positions within provided world bounds
+static void moveUnitsRandomHelper(const std::unordered_map<int, std::shared_ptr<UnitEntity>>& units,
+                                  float minx, float miny, float maxx, float maxy) {
+    if (maxx - minx <= 0.0f || maxy - miny <= 0.0f) return;
+    for (const auto& p : units) {
+        auto u = p.second;
+        if (!u) continue;
+        float rx = minx + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX)) * (maxx - minx);
+        float ry = miny + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX)) * (maxy - miny);
+        u->setTargetPosition(Position(rx, ry));
+        u->setState(UnitState::MOVING);
+    }
+}
+
+// Move all units within the world view bounds (minx,miny)-(maxx,maxy)
+void UnitRenderer::moveAllUnitsToRandomInView(float minx, float miny, float maxx, float maxy) {
+    moveUnitsRandomHelper(units_, minx, miny, maxx, maxy);
+}
+
+// Reset all units that have an initial position recorded to that position (instant teleport)
+void UnitRenderer::resetAllUnitsToInitialPositions() {
+    for (const auto& p : initialPositions_) {
+        int id = p.first;
+        auto it = units_.find(id);
+        if (it == units_.end()) continue;
+        auto u = it->second;
+        if (!u) continue;
+        // teleport unit back to initial position and clear movement
+        u->updatePosition(p.second);
+        u->setTargetPosition(p.second);
+        u->setState(UnitState::IDLE);
+    }
 }

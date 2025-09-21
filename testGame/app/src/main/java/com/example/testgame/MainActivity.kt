@@ -37,6 +37,8 @@ class MainActivity : GameActivity() {
     private external fun getDefense(): Int
     private external fun getPositionX(): Float
     private external fun getPositionY(): Float
+    private external fun getTargetPositionX(): Float
+    private external fun getTargetPositionY(): Float
     private external fun getUnitStatusString(): String
     // Clear persisted selected unit in native side
     private external fun clearPersistSelectedUnit()
@@ -49,6 +51,12 @@ class MainActivity : GameActivity() {
     // JNI Native functions - ユニットコマンド用
     private external fun moveUnit()
     private external fun stopUnit()
+    // Move persisted selected unit to a random point inside current visible view (screen px)
+    private external fun moveSelectedUnitToRandomInView(screenW: Int, screenH: Int): Boolean
+    // Debug: move all units to random positions in view
+    private external fun moveAllUnitsToRandomInView(screenW: Int, screenH: Int): Boolean
+    // Debug: reset all units to initial positions (teleport)
+    private external fun resetAllUnitsToInitialPositions(): Boolean
     // JNI Native functions - Camera pan commands (delta in world units)
     private external fun panCameraBy(dx: Float, dy: Float)
     // JNI: toggle native attack-range visualization
@@ -67,6 +75,14 @@ class MainActivity : GameActivity() {
 
     // Start a periodic UI updater to poll native state and update the status board
     val statusBoard = overlay.findViewById<com.example.testgame.StatusBoardView>(R.id.status_board)
+    // Ensure status board is visually on top of other overlay controls so its buttons are tappable
+    try {
+        statusBoard.bringToFront()
+        statusBoard.elevation = 200f
+        statusBoard.invalidate()
+    } catch (e: Throwable) {
+        // ignore if not yet attached
+    }
     // a centered dialog to show selected unit info (created lazily)
     var centerUnitDialog: com.example.testgame.StatusBoardView? = null
     // show the center dialog only if the user explicitly touched a unit
@@ -97,7 +113,7 @@ class MainActivity : GameActivity() {
                             // create center dialog lazily when we actually have a selected unit
                             if (centerUnitDialog == null) {
                                 val dialog = com.example.testgame.StatusBoardView(this@MainActivity)
-                                dialog.setBoardSize(390, 210)
+                                dialog.setBoardSize(390, 320)
                                 dialog.setBackgroundColorHex("#CC000000")
                                 dialog.setTextColorHex("#FFFFFFFF")
                                 // layout params to center it
@@ -107,6 +123,13 @@ class MainActivity : GameActivity() {
                                 )
                                 lp.gravity = android.view.Gravity.CENTER
                                 (overlay as? android.view.ViewGroup)?.addView(dialog, lp)
+                                // Ensure dialog is on top so its buttons receive touches
+                                try {
+                                    dialog.bringToFront()
+                                    dialog.elevation = 300f
+                                } catch (e: Throwable) {
+                                    // ignore
+                                }
                                 centerUnitDialog = dialog
                             }
 
@@ -121,11 +144,28 @@ class MainActivity : GameActivity() {
                             val px = getPositionX()
                             val py = getPositionY()
                             val status = getUnitStatusString()
-                            val text = String.format("%s\nHP: %d/%d\nATK: %d-%d DEF: %d\nPos: %.1f, %.1f\nState: %s",
-                                name, curHp, maxHp, minAtk, maxAtk, def, px, py, status)
+                            val tx = getTargetPositionX()
+                            val ty = getTargetPositionY()
+                            val text = String.format("%s\nHP: %d/%d\nATK: %d-%d DEF: %d\nPos: %.1f, %.1f\nTarget: %.1f, %.1f\nState: %s",
+                                name, curHp, maxHp, minAtk, maxAtk, def, px, py, tx, ty, status)
                             dialog.setText(text)
                             dialog.configureButtons(
-                                Triple("Move", View.generateViewId()) { moveUnit() },
+                                Triple("Move", View.generateViewId()) {
+                                    // Move the currently persisted selected unit to a random visible location
+                                    try {
+                                        val metrics = resources.displayMetrics
+                                        val screenW = metrics.widthPixels
+                                        val screenH = metrics.heightPixels
+                                        val moved = moveSelectedUnitToRandomInView(screenW, screenH)
+                                        if (!moved) {
+                                            // No persisted selection; inform user instead of falling back to unit 1
+                                            android.widget.Toast.makeText(this@MainActivity, "No unit selected", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Throwable) {
+                                        // If JNI call fails for any reason, inform user
+                                        android.widget.Toast.makeText(this@MainActivity, "Move failed", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 Triple("Stop", View.generateViewId()) { stopUnit() },
                                 Triple("Close", View.generateViewId()) {
                                     dialog.visibility = View.GONE
@@ -155,7 +195,7 @@ class MainActivity : GameActivity() {
         handler.postDelayed(updateTask, 250)
 
         // Configure the status board appearance and buttons. Caller can change these at runtime.
-    statusBoard.setBoardSize(300, 180) // dp units (1.5x)
+    statusBoard.setBoardSize(300, 270) // dp units (increased height)
         statusBoard.setBackgroundColorHex("#66000000")
         statusBoard.setTextColorHex("#FFFFFFFF")
 
@@ -188,6 +228,30 @@ class MainActivity : GameActivity() {
         }
         btnRight.setOnClickListener {
             panCameraBy(panAmount, 0.0f)
+        }
+
+        // Wire debug buttons
+        try {
+            val btnMoveAll = overlay.findViewById<android.widget.Button>(R.id.button_move_all)
+            val btnResetAll = overlay.findViewById<android.widget.Button>(R.id.button_reset_all)
+            btnMoveAll?.setOnClickListener {
+                try {
+                    val metrics = resources.displayMetrics
+                    moveAllUnitsToRandomInView(metrics.widthPixels, metrics.heightPixels)
+                } catch (e: Throwable) {
+                    android.widget.Toast.makeText(this@MainActivity, "Move all failed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+            btnResetAll?.setOnClickListener {
+                try {
+                    val ok = resetAllUnitsToInitialPositions()
+                    if (!ok) android.widget.Toast.makeText(this@MainActivity, "Reset failed", android.widget.Toast.LENGTH_SHORT).show()
+                } catch (e: Throwable) {
+                    android.widget.Toast.makeText(this@MainActivity, "Reset failed", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Throwable) {
+            // ignore if layout not available
         }
 
         // Wire the attack-range toggle switch in the status board (if present)
@@ -223,6 +287,39 @@ class MainActivity : GameActivity() {
                         // let the button receive the touch
                         return@setOnTouchListener false
                     }
+                }
+
+                // If the touch is inside the top-left status board, let it handle the touch so its buttons work
+                try {
+                    val loc = IntArray(2)
+                    statusBoard.getLocationOnScreen(loc)
+                    val sx = loc[0].toFloat()
+                    val sy = loc[1].toFloat()
+                    val sw = statusBoard.width.toFloat()
+                    val sh = statusBoard.height.toFloat()
+                    if (rawX >= sx && rawX <= sx + sw && rawY >= sy && rawY <= sy + sh) {
+                        return@setOnTouchListener false
+                    }
+                } catch (e: Throwable) {
+                    // ignore if statusBoard not laid out yet
+                }
+
+                // If a centered dialog exists and the touch is inside it, let the dialog handle the touch
+                try {
+                    val dialog = centerUnitDialog
+                    if (dialog != null && dialog.visibility == View.VISIBLE) {
+                        val loc2 = IntArray(2)
+                        dialog.getLocationOnScreen(loc2)
+                        val dx = loc2[0].toFloat()
+                        val dy = loc2[1].toFloat()
+                        val dw = dialog.width.toFloat()
+                        val dh = dialog.height.toFloat()
+                        if (rawX >= dx && rawX <= dx + dw && rawY >= dy && rawY <= dy + dh) {
+                            return@setOnTouchListener false
+                        }
+                    }
+                } catch (e: Throwable) {
+                    // ignore if dialog not attached yet
                 }
 
                 try {

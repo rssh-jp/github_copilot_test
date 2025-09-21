@@ -271,6 +271,26 @@ Java_com_example_testgame_MainActivity_getPositionY(JNIEnv *env, jobject /* this
     return unit->getPosition().getY();
 }
 
+// Return the persisted selected unit's target position X (world coords)
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getTargetPositionX(JNIEnv *env, jobject /* this */) {
+    auto unit = getPersistSelectedUnit();
+    if (!unit) {
+        return 0.0f;
+    }
+    return unit->getTargetPosition().getX();
+}
+
+// Return the persisted selected unit's target position Y (world coords)
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getTargetPositionY(JNIEnv *env, jobject /* this */) {
+    auto unit = getPersistSelectedUnit();
+    if (!unit) {
+        return 0.0f;
+    }
+    return unit->getTargetPosition().getY();
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_testgame_MainActivity_getUnitStatusString(JNIEnv *env, jobject /* this */) {
     // Prefer the currently selected unit (if any) for status display.
@@ -379,6 +399,56 @@ Java_com_example_testgame_MainActivity_panCameraBy(JNIEnv *env, jobject /* this 
     LOGE("panCameraBy: fallback not implemented for this Renderer. Please add Renderer::panCameraBy or setCameraOffset API.");
 }
 
+// Java: moveAllUnitsToRandomInView(screenWidthPx:int, screenHeightPx:int)
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_testgame_MainActivity_moveAllUnitsToRandomInView(JNIEnv *env, jobject /* this */, jint screenW, jint screenH) {
+    if (!g_renderer) {
+        LOGE("moveAllUnitsToRandomInView: renderer not available");
+        return JNI_FALSE;
+    }
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) {
+        LOGE("moveAllUnitsToRandomInView: unitRenderer not available");
+        return JNI_FALSE;
+    }
+
+    // Convert screen corners to world coordinates
+    float wx0 = 0.0f, wy0 = 0.0f, wx1 = 0.0f, wy1 = 0.0f;
+    g_renderer->screenToWorld(0.0f, 0.0f, wx0, wy0);
+    g_renderer->screenToWorld(static_cast<float>(screenW), static_cast<float>(screenH), wx1, wy1);
+
+    float minx = std::min(wx0, wx1);
+    float maxx = std::max(wx0, wx1);
+    float miny = std::min(wy0, wy1);
+    float maxy = std::max(wy0, wy1);
+
+    if (maxx - minx <= 0.0f || maxy - miny <= 0.0f) {
+        LOGE("moveAllUnitsToRandomInView: invalid view bounds (%f,%f)-(%f,%f)", minx, miny, maxx, maxy);
+        return JNI_FALSE;
+    }
+
+    unitRenderer->moveAllUnitsToRandomInView(minx, miny, maxx, maxy);
+    LOGI("moveAllUnitsToRandomInView: moved %zu units to random positions", unitRenderer->getAllUnits().size());
+    return JNI_TRUE;
+}
+
+// Java: resetAllUnitsToInitialPositions()
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_testgame_MainActivity_resetAllUnitsToInitialPositions(JNIEnv *env, jobject /* this */) {
+    if (!g_renderer) {
+        LOGE("resetAllUnitsToInitialPositions: renderer not available");
+        return JNI_FALSE;
+    }
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) {
+        LOGE("resetAllUnitsToInitialPositions: unitRenderer not available");
+        return JNI_FALSE;
+    }
+    unitRenderer->resetAllUnitsToInitialPositions();
+    LOGI("resetAllUnitsToInitialPositions: reset units to initial positions");
+    return JNI_TRUE;
+}
+
 // JNI: toggle attack range visualization in UnitRenderer. Called from UI toggle switch.
 extern "C" JNIEXPORT void JNICALL
 Java_com_example_testgame_MainActivity_setShowAttackRanges(JNIEnv *env, jobject /* this */, jboolean show) {
@@ -393,4 +463,54 @@ Java_com_example_testgame_MainActivity_setShowAttackRanges(JNIEnv *env, jobject 
     }
     unitRenderer->setShowAttackRanges(show == JNI_TRUE);
     LOGI("setShowAttackRanges called: %d", (int)show);
+}
+
+// Move the persisted selected unit to a random position within the currently visible screen area.
+// Java: moveSelectedUnitToRandomInView(screenWidthPx:int, screenHeightPx:int)
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_testgame_MainActivity_moveSelectedUnitToRandomInView(JNIEnv *env, jobject /* this */, jint screenW, jint screenH) {
+    if (!g_renderer) {
+        LOGE("moveSelectedUnitToRandomInView: renderer not available");
+        return JNI_FALSE;
+    }
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) {
+        LOGE("moveSelectedUnitToRandomInView: unitRenderer not available");
+        return JNI_FALSE;
+    }
+
+    if (g_persistSelectedUnitId <= 0) {
+        LOGI("moveSelectedUnitToRandomInView: no persisted selected unit");
+        return JNI_FALSE;
+    }
+
+    auto unit = unitRenderer->getUnit(g_persistSelectedUnitId);
+    if (!unit) {
+        LOGE("moveSelectedUnitToRandomInView: persisted unit id %d not found", g_persistSelectedUnitId);
+        return JNI_FALSE;
+    }
+
+    // Convert screen corners to world coordinates
+    float wx0 = 0.0f, wy0 = 0.0f, wx1 = 0.0f, wy1 = 0.0f;
+    g_renderer->screenToWorld(0.0f, 0.0f, wx0, wy0);
+    g_renderer->screenToWorld(static_cast<float>(screenW), static_cast<float>(screenH), wx1, wy1);
+
+    float minx = std::min(wx0, wx1);
+    float maxx = std::max(wx0, wx1);
+    float miny = std::min(wy0, wy1);
+    float maxy = std::max(wy0, wy1);
+
+    if (maxx - minx <= 0.0f || maxy - miny <= 0.0f) {
+        LOGE("moveSelectedUnitToRandomInView: invalid view bounds (%f,%f)-(%f,%f)", minx, miny, maxx, maxy);
+        return JNI_FALSE;
+    }
+
+    // random in [min, max]
+    float rx = minx + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX)) * (maxx - minx);
+    float ry = miny + (static_cast<float>(rand()) / static_cast<float>(RAND_MAX)) * (maxy - miny);
+
+    unit->setTargetPosition(Position(rx, ry));
+    unit->setState(UnitState::MOVING);
+    LOGI("Moved persisted unit %d to random visible pos (%.3f, %.3f)", g_persistSelectedUnitId, rx, ry);
+    return JNI_TRUE;
 }

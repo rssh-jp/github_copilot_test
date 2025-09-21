@@ -97,6 +97,20 @@ public:
     const std::unordered_map<int, std::shared_ptr<UnitEntity>>& getAllUnits() const;
 
     /**
+     * @brief Move all registered units to random positions within world bounds
+     * @param minx world minimum X
+     * @param miny world minimum Y
+     * @param maxx world maximum X
+     * @param maxy world maximum Y
+     */
+    void moveAllUnitsToRandomInView(float minx, float miny, float maxx, float maxy);
+
+    /**
+     * @brief Reset all registered units to their recorded initial positions (teleport)
+     */
+    void resetAllUnitsToInitialPositions();
+
+    /**
      * @brief 当たり判定のワイヤーフレーム表示を有効／無効にする
      */
     void setShowCollisionWireframes(bool show);
@@ -129,6 +143,8 @@ private:
     
     // 登録されたユニット
     std::unordered_map<int, std::shared_ptr<UnitEntity>> units_;
+    // 各ユニットの初期位置を保持するマップ (unitId -> Position)
+    std::unordered_map<int, Position> initialPositions_;
     
     // ユニットのテクスチャマップ (ユニットID -> テクスチャ)
     std::unordered_map<int, std::shared_ptr<TextureAsset>> unitTextures_;
@@ -143,6 +159,8 @@ private:
     bool showCollisionWireframes_ = false;
     // 攻撃範囲表示フラグ
     bool showAttackRanges_ = false;
+    // 初期位置を保存/復元する機能のフラグ (通常有効)
+    bool trackInitialPositions_ = true;
     // Render attack range visualization (declaration is public above)
 };
 

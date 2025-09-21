@@ -79,4 +79,33 @@
 
     </LinearLayout>
 
+    <!-- Debug controls: move all / reset all placed above camera buttons -->
+    <LinearLayout
+        android:id="@+id/debug_buttons_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_margin="8dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/button_move_all"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Move All"
+            android:background="#AA000000"
+            android:textColor="#FFFFFFFF"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/button_reset_all"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Reset All"
+            android:background="#AA000000"
+            android:textColor="#FFFFFFFF" />
+
+    </LinearLayout>
+
 </FrameLayout>
