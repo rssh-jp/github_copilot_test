@@ -6,7 +6,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="6dp"
+        android:padding="9dp"
         android:background="#66000000">
 
         <TextView
@@ -14,7 +14,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#FFFFFFFF"
-            android:textSize="12sp"
+            android:textSize="24sp"
             android:text="Status" />
 
         <LinearLayout
@@ -22,7 +22,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="6dp" />
+            android:layout_marginTop="9dp" />
     </LinearLayout>
 
 </merge>

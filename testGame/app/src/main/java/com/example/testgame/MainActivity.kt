@@ -28,6 +28,8 @@ class MainActivity : GameActivity() {
     private external fun getPositionX(): Float
     private external fun getPositionY(): Float
     private external fun getUnitStatusString(): String
+    // Clear persisted selected unit in native side
+    private external fun clearPersistSelectedUnit()
     // JNI Native functions - Renderer status (camera / HUD)
     private external fun getCameraOffsetX(): Float
     private external fun getCameraOffsetY(): Float
@@ -53,11 +55,15 @@ class MainActivity : GameActivity() {
 
     // Start a periodic UI updater to poll native state and update the status board
     val statusBoard = overlay.findViewById<com.example.testgame.StatusBoardView>(R.id.status_board)
+    // a centered dialog to show selected unit info (created lazily)
+    var centerUnitDialog: com.example.testgame.StatusBoardView? = null
+    // show the center dialog only if the user explicitly touched a unit
+    var centerDialogShowRequested: Boolean = false
         val handler = android.os.Handler(mainLooper)
         val updateTask = object : Runnable {
             override fun run() {
                 try {
-                    // Query native state via JNI
+                    // Keep the top-left status board showing world info always
                     val camX = getCameraOffsetX()
                     val camY = getCameraOffsetY()
                     val elapsed = getElapsedTime()
@@ -66,8 +72,68 @@ class MainActivity : GameActivity() {
                     val f2 = (packed shr 8) and 0xFF
                     val f3 = (packed shr 16) and 0xFF
                     val f4 = (packed shr 24) and 0xFF
-                    val text = String.format("Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs", camX, camY, f1, f2, f3, f4, elapsed)
-                    statusBoard.setText(text)
+                    val worldText = String.format("Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs", camX, camY, f1, f2, f3, f4, elapsed)
+                    statusBoard.setText(worldText)
+                    statusBoard.setButtonsVisible(false)
+
+                    // Now check for a selected unit; if present, show a centered dialog with details
+                    val unitName = getUnitName()
+                    // Show dialog only when user requested it via touch. Once shown it stays visible
+                    // until the user presses Close (centerDialogShowRequested is cleared there).
+                    if (centerDialogShowRequested) {
+                        if (unitName.isNotEmpty()) {
+                            // create center dialog lazily when we actually have a selected unit
+                            if (centerUnitDialog == null) {
+                                val dialog = com.example.testgame.StatusBoardView(this@MainActivity)
+                                dialog.setBoardSize(390, 210)
+                                dialog.setBackgroundColorHex("#CC000000")
+                                dialog.setTextColorHex("#FFFFFFFF")
+                                // layout params to center it
+                                val lp = android.widget.FrameLayout.LayoutParams(
+                                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                                )
+                                lp.gravity = android.view.Gravity.CENTER
+                                (overlay as? android.view.ViewGroup)?.addView(dialog, lp)
+                                centerUnitDialog = dialog
+                            }
+
+                            // populate dialog text and buttons from the selected unit
+                            val dialog = centerUnitDialog!!
+                            val name = unitName
+                            val curHp = getCurrentHp()
+                            val maxHp = getMaxHp()
+                            val minAtk = getMinAttack()
+                            val maxAtk = getMaxAttack()
+                            val def = getDefense()
+                            val px = getPositionX()
+                            val py = getPositionY()
+                            val status = getUnitStatusString()
+                            val text = String.format("%s\nHP: %d/%d\nATK: %d-%d DEF: %d\nPos: %.1f, %.1f\nState: %s",
+                                name, curHp, maxHp, minAtk, maxAtk, def, px, py, status)
+                            dialog.setText(text)
+                            dialog.configureButtons(
+                                Triple("Move", View.generateViewId()) { moveUnit() },
+                                Triple("Stop", View.generateViewId()) { stopUnit() },
+                                Triple("Close", View.generateViewId()) {
+                                    dialog.visibility = View.GONE
+                                    centerDialogShowRequested = false
+                                    try {
+                                        clearPersistSelectedUnit()
+                                    } catch (e: Throwable) {
+                                        // ignore
+                                    }
+                                }
+                            )
+                            dialog.visibility = View.VISIBLE
+                        } else {
+                            // Selected unit might have been cleared in native side; keep showing last known
+                            // dialog contents until Close is pressed. Do NOT create or overwrite the dialog
+                            // when no unit is currently selected on the native side.
+                            // If there's no existing dialog (shouldn't happen because we only set
+                            // centerDialogShowRequested when a unit was selected) then do nothing.
+                        }
+                    }
                 } catch (e: Throwable) {
                     // ignore
                 }
@@ -77,7 +143,7 @@ class MainActivity : GameActivity() {
         handler.postDelayed(updateTask, 250)
 
         // Configure the status board appearance and buttons. Caller can change these at runtime.
-        statusBoard.setBoardSize(200, 120) // dp units
+    statusBoard.setBoardSize(300, 180) // dp units (1.5x)
         statusBoard.setBackgroundColorHex("#66000000")
         statusBoard.setTextColorHex("#FFFFFFFF")
 
@@ -87,6 +153,9 @@ class MainActivity : GameActivity() {
             Triple("OK", View.generateViewId()) { /* ok */ },
             Triple("NG", View.generateViewId()) { /* ng */ }
         )
+
+        // For the top-left HUD we don't want to show buttons by default; hide them.
+        statusBoard.setButtonsVisible(false)
 
         // Attach listeners to simple black pan buttons so user can see and use them
         val btnUp = overlay.findViewById<View>(R.id.button_pan_up)
@@ -131,8 +200,11 @@ class MainActivity : GameActivity() {
                 }
 
                 try {
-                    // Forward to native
-                    onTouch(rawX, rawY)
+                    // Forward to native; onTouch returns true if a unit was selected
+                    val selected = onTouch(rawX, rawY)
+                    if (selected) {
+                        centerDialogShowRequested = true
+                    }
                 } catch (e: Throwable) {
                     // ignore
                 }

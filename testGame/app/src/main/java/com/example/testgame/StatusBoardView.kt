@@ -58,6 +58,20 @@ class StatusBoardView @JvmOverloads constructor(
     }
 
     /**
+     * Show or hide the button container. When hidden, existing buttons remain but are not visible.
+     */
+    fun setButtonsVisible(visible: Boolean) {
+        buttonContainer.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Query whether buttons are currently visible.
+     */
+    fun areButtonsVisible(): Boolean {
+        return buttonContainer.visibility == View.VISIBLE
+    }
+
+    /**
      * Configure buttons. Each element in labels is a Triple of (label, id, clickListener).
      * If clickListener is null, the button is not clickable.
      */

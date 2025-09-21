@@ -13,6 +13,10 @@
 
 // グローバル変数でRenderer参照を保持
 static Renderer* g_renderer = nullptr;
+// currently selected unit id (set by touch hit-test). -1 = none
+static int g_selectedUnitId = -1;
+// persisted last selected unit id so UI can keep polling its state until explicitly cleared
+static int g_persistSelectedUnitId = -1;
 
 // Rendererの参照を設定する関数（他のファイルから呼ばれる）
 extern "C" void setRendererReference(Renderer* renderer) {
@@ -72,6 +76,24 @@ std::shared_ptr<UnitEntity> getPlayerUnit() {
     return unitRenderer->getUnit(1); // プレイヤーユニットはID=1
 }
 
+// Return currently selected unit if any
+std::shared_ptr<UnitEntity> getSelectedUnit() {
+    if (!g_renderer) return nullptr;
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) return nullptr;
+    if (g_selectedUnitId <= 0) return nullptr;
+    return unitRenderer->getUnit(g_selectedUnitId);
+}
+
+// Return persisted selected unit (last selected) if any
+std::shared_ptr<UnitEntity> getPersistSelectedUnit() {
+    if (!g_renderer) return nullptr;
+    auto unitRenderer = g_renderer->getUnitRenderer();
+    if (!unitRenderer) return nullptr;
+    if (g_persistSelectedUnitId <= 0) return nullptr;
+    return unitRenderer->getUnit(g_persistSelectedUnitId);
+}
+
 // タッチイベント処理関数
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, jfloat x, jfloat y) {
@@ -86,12 +108,6 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
         return JNI_FALSE;
     }
     
-    auto unit = unitRenderer->getUnit(1); // プレイヤーユニット
-    if (!unit) {
-        LOGE("Player unit not found for touch processing");
-        return JNI_FALSE;
-    }
-    
     // Convert screen coordinates (pixels) to world/game coordinates using Renderer helper
     float worldX = 0.0f;
     float worldY = 0.0f;
@@ -99,25 +115,60 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
 
     LOGI("Touch at screen (%f, %f) -> world (%.3f, %.3f)", x, y, worldX, worldY);
 
-    // Set player's target position to the converted world coordinates
-    unit->setTargetPosition(Position(worldX, worldY));
-    unit->setState(UnitState::MOVING);
-    return JNI_TRUE;
+    // Hit-test units: pick the nearest unit whose collision radius contains the touch point
+    const auto& all = unitRenderer->getAllUnits();
+    float bestDist = std::numeric_limits<float>::infinity();
+    int bestId = -1;
+    for (const auto& p : all) {
+        auto u = p.second;
+        if (!u) continue;
+        auto pos = u->getPosition();
+        float dx = worldX - pos.getX();
+        float dy = worldY - pos.getY();
+        float dist = std::sqrt(dx*dx + dy*dy);
+        float radius = u->getStats().getCollisionRadius();
+        if (dist <= radius && dist < bestDist) {
+            bestDist = dist;
+            bestId = p.first;
+        }
+    }
+
+    if (bestId != -1) {
+        // select the hit unit
+        g_selectedUnitId = bestId;
+        // persist selection so UI can continue showing this unit even after temporary clears
+        g_persistSelectedUnitId = bestId;
+        LOGI("Selected unit id %d via touch", bestId);
+        return JNI_TRUE; // indicate selection occurred
+    }
+
+    // No unit hit: clear selection and treat as move command for player unit (id=1)
+    g_selectedUnitId = -1;
+    auto player = unitRenderer->getUnit(1);
+    if (!player) {
+        LOGE("Player unit not found for touch processing");
+        return JNI_FALSE;
+    }
+    player->setTargetPosition(Position(worldX, worldY));
+    player->setState(UnitState::MOVING);
+    return JNI_FALSE; // indicate no selection (move issued)
 }
 
 // MainActivityで使用されている関数名に合わせた関数定義
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_testgame_MainActivity_getUnitName(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    // Prefer persisted selected unit so UI can keep polling last selection
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
-        return env->NewStringUTF("Unknown");
+        // No persisted selection -> return empty string to indicate none selected
+        return env->NewStringUTF("");
     }
     return env->NewStringUTF(unit->getName().c_str());
 }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getCurrentHp(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0;
     }
@@ -126,7 +177,7 @@ Java_com_example_testgame_MainActivity_getCurrentHp(JNIEnv *env, jobject /* this
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getMaxHp(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 100;
     }
@@ -136,7 +187,7 @@ Java_com_example_testgame_MainActivity_getMaxHp(JNIEnv *env, jobject /* this */)
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getMinAttack(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0;
     }
@@ -146,7 +197,7 @@ Java_com_example_testgame_MainActivity_getMinAttack(JNIEnv *env, jobject /* this
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getMaxAttack(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0;
     }
@@ -155,17 +206,17 @@ Java_com_example_testgame_MainActivity_getMaxAttack(JNIEnv *env, jobject /* this
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_testgame_MainActivity_getDefense(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0;
     }
-    // UnitStatsに防御力がないため、固定値を返す（将来的にUnitStatsに追加予定）
+    // If UnitStats lacks defense, return fixed value
     return 5;
 }
 
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_example_testgame_MainActivity_getPositionX(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0.0f;
     }
@@ -174,7 +225,7 @@ Java_com_example_testgame_MainActivity_getPositionX(JNIEnv *env, jobject /* this
 
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_example_testgame_MainActivity_getPositionY(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    auto unit = getPersistSelectedUnit();
     if (!unit) {
         return 0.0f;
     }
@@ -183,11 +234,16 @@ Java_com_example_testgame_MainActivity_getPositionY(JNIEnv *env, jobject /* this
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_testgame_MainActivity_getUnitStatusString(JNIEnv *env, jobject /* this */) {
-    auto unit = getPlayerUnit();
+    // Prefer the currently selected unit (if any) for status display.
+    auto unit = getSelectedUnit();
+    if (!unit) {
+        // Fallback to player unit
+        unit = getPlayerUnit();
+    }
     if (!unit) {
         return env->NewStringUTF("UNKNOWN");
     }
-    
+
     UnitState state = unit->getState();
     switch (state) {
         case UnitState::IDLE:
@@ -199,6 +255,13 @@ Java_com_example_testgame_MainActivity_getUnitStatusString(JNIEnv *env, jobject 
         default:
             return env->NewStringUTF("UNKNOWN");
     }
+}
+
+// Clear persisted selection - callable from Java when user closes the dialog
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_testgame_MainActivity_clearPersistSelectedUnit(JNIEnv *env, jobject /* this */) {
+    g_persistSelectedUnitId = -1;
+    LOGI("Cleared persisted selected unit");
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -214,6 +277,8 @@ Java_com_example_testgame_MainActivity_moveUnit(JNIEnv *env, jobject /* this */)
     float y = (rand() % 200 - 100) / 10.0f;  // -10.0 to 10.0
     Position targetPos(x, y);
     unit->setTargetPosition(targetPos);
+    // Ensure unit state reflects movement so UI shows MOVING
+    unit->setState(UnitState::MOVING);
     LOGI("Unit moving to (%f, %f)", x, y);
 }
 
@@ -228,6 +293,8 @@ Java_com_example_testgame_MainActivity_stopUnit(JNIEnv *env, jobject /* this */)
     // 現在位置を目標位置に設定することで停止
     auto pos = unit->getPosition();
     unit->setTargetPosition(pos);
+    // Set state to IDLE so UI shows correct status
+    unit->setState(UnitState::IDLE);
     LOGI("Unit stopped");
 }
 
