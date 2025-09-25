@@ -114,7 +114,7 @@ std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g, fl
  * 各ユニットの状態に応じてテクスチャや色を変え、モデル描画とHPバー描画を行います。
  * 描画順序: ユニット本体 -> HPバー -> (最後に) ワイヤーフレーム / 攻撃範囲
  */
-void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
+void UnitRenderer::render(const Shader* shader) {
     for (const auto& pair : units_) {
         const auto& unitId = pair.first;
         const auto& unit = pair.second;
@@ -186,10 +186,10 @@ void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float camer
     modelMatrix[10] = 1.0f;
     modelMatrix[15] = 1.0f;
         
-    // ユニットの実際の位置を設定（カメラオフセットを考慮して画面上の正しい位置にする）
+    // ユニットのワールド座標位置を設定（ビュー行列でカメラ変換が適用される）
     auto position = unit->getPosition();
-    modelMatrix[12] = position.getX() + cameraOffsetX; // X座標
-    modelMatrix[13] = position.getY() + cameraOffsetY; // Y座標
+    modelMatrix[12] = position.getX(); // X座標
+    modelMatrix[13] = position.getY(); // Y座標
         
     // モデルマトリックスをシェーダに送信
     shader->setModelMatrix(modelMatrix);
@@ -199,18 +199,18 @@ void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float camer
         
         // HP表示を描画（生きているユニットのみ）
         if (unit->isAlive()) {
-            renderHPBar(shader, unit, cameraOffsetX, cameraOffsetY);
+            renderHPBar(shader, unit);
         }
     }
 
     // 全ユニットの当たり判定ワイヤーフレームを最前面に表示
     if (showCollisionWireframes_) {
-        renderCollisionWireframes(shader, cameraOffsetX, cameraOffsetY);
+        renderCollisionWireframes(shader);
     }
 
     // 攻撃範囲の表示（最前面）
     if (showAttackRanges_) {
-        renderAttackRanges(shader, cameraOffsetX, cameraOffsetY);
+        renderAttackRanges(shader);
     }
 }
 
@@ -219,7 +219,7 @@ void UnitRenderer::render(const Shader* shader, float cameraOffsetX, float camer
  *
  * カメラオフセットを考慮して、ユニットのワールド位置に円を配置します。
  */
-void UnitRenderer::renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
+void UnitRenderer::renderAttackRanges(const Shader* shader) {
     glDepthMask(GL_FALSE); // 深度書き込みオフ
 
     const int segments = 48; // より滑らかな円
@@ -263,8 +263,8 @@ void UnitRenderer::renderAttackRanges(const Shader* shader, float cameraOffsetX,
         float modelMatrix[16] = {0};
         modelMatrix[0] = 1.0f; modelMatrix[5] = 1.0f; modelMatrix[10] = 1.0f; modelMatrix[15] = 1.0f;
         auto position = unit->getPosition();
-        modelMatrix[12] = position.getX() + cameraOffsetX;
-        modelMatrix[13] = position.getY() + cameraOffsetY;
+        modelMatrix[12] = position.getX();
+        modelMatrix[13] = position.getY();
 
         shader->setModelMatrix(modelMatrix);
         // 描画は塗りつぶしにせずラインループで表示すると見やすい
@@ -283,7 +283,7 @@ void UnitRenderer::setShowCollisionWireframes(bool show) {
  *
  * デバッグ用途。描画は GL_LINE_LOOP で行われ、深度書き込みをオフにして最前面に表示します。
  */
-void UnitRenderer::renderCollisionWireframes(const Shader* shader, float cameraOffsetX, float cameraOffsetY) {
+void UnitRenderer::renderCollisionWireframes(const Shader* shader) {
     // 深度を最前面に表示するために深度書き込みを無効化
     glDepthMask(GL_FALSE); // 深度書き込みオフ
 
@@ -328,8 +328,8 @@ void UnitRenderer::renderCollisionWireframes(const Shader* shader, float cameraO
     float modelMatrix[16] = {0};
     modelMatrix[0] = 1.0f; modelMatrix[5] = 1.0f; modelMatrix[10] = 1.0f; modelMatrix[15] = 1.0f;
     auto position = unit->getPosition();
-    modelMatrix[12] = position.getX() + cameraOffsetX;
-    modelMatrix[13] = position.getY() + cameraOffsetY;
+    modelMatrix[12] = position.getX();
+    modelMatrix[13] = position.getY();
 
         shader->setModelMatrix(modelMatrix);
         shader->drawModelWithMode(circleModel, GL_LINE_LOOP);
@@ -418,7 +418,7 @@ void UnitRenderer::updateUnits(float deltaTime) {
  *
  * バーはユニットの上に固定され、HP割合に応じて色と幅が変化します。
  */
-void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitEntity>& unit, float cameraOffsetX, float cameraOffsetY) {
+void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitEntity>& unit) {
     // HP表示用のバーを描画する
     // バーの設定
     const float barWidth = 0.3f; // バーの幅
@@ -455,8 +455,8 @@ void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitE
         
         // ユニットの実際の位置を設定
         auto position = unit->getPosition();
-    modelMatrix[12] = position.getX() + cameraOffsetX; // X座標
-    modelMatrix[13] = position.getY() + cameraOffsetY; // Y座標
+    modelMatrix[12] = position.getX(); // X座標
+    modelMatrix[13] = position.getY(); // Y座標
         
         // モデルマトリックスをシェーダに送信
         shader->setModelMatrix(modelMatrix);
@@ -501,8 +501,8 @@ void UnitRenderer::renderHPBar(const Shader* shader, const std::shared_ptr<UnitE
         
         // ユニットの実際の位置を設定
         auto position = unit->getPosition();
-    modelMatrix[12] = position.getX() + cameraOffsetX; // X座標
-    modelMatrix[13] = position.getY() + cameraOffsetY; // Y座標
+    modelMatrix[12] = position.getX(); // X座標
+    modelMatrix[13] = position.getY(); // Y座標
         
         // モデルマトリックスをシェーダに送信
         shader->setModelMatrix(modelMatrix);

@@ -68,6 +68,9 @@ Shader *Shader::loadShader(
             GLint projectionMatrixUniform = glGetUniformLocation(
                     program,
                     projectionMatrixUniformName.c_str());
+            GLint viewMatrixUniform = glGetUniformLocation(
+                    program,
+                    "uView");
             GLint modelMatrixUniform = glGetUniformLocation(
                     program,
                     modelMatrixUniformName.c_str());
@@ -77,12 +80,14 @@ Shader *Shader::loadShader(
             aout << "  " << positionAttributeName << ": " << positionAttribute << std::endl;
             aout << "  " << uvAttributeName << ": " << uvAttribute << std::endl;
             aout << "  " << projectionMatrixUniformName << ": " << projectionMatrixUniform << std::endl;
+            aout << "  uView: " << viewMatrixUniform << std::endl;
             aout << "  " << modelMatrixUniformName << ": " << modelMatrixUniform << std::endl;
 
             // Only create a new shader if all the attributes are found.
             if (positionAttribute != -1
                 && uvAttribute != -1
                 && projectionMatrixUniform != -1
+                && viewMatrixUniform != -1
                 && modelMatrixUniform != -1) {
 
                 shader = new Shader(
@@ -90,6 +95,7 @@ Shader *Shader::loadShader(
                         positionAttribute,
                         uvAttribute,
                         projectionMatrixUniform,
+                        viewMatrixUniform,
                         modelMatrixUniform);
             } else {
                 glDeleteProgram(program);
@@ -242,6 +248,10 @@ void Shader::drawModelWithMode(const Model &model, GLenum mode) const {
 
 void Shader::setProjectionMatrix(float *projectionMatrix) const {
     glUniformMatrix4fv(projectionMatrix_, 1, false, projectionMatrix);
+}
+
+void Shader::setViewMatrix(float *viewMatrix) const {
+    glUniformMatrix4fv(viewMatrix_, 1, false, viewMatrix);
 }
 
 void Shader::setModelMatrix(float *modelMatrix) const {

@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 #include <android/imagedecoder.h>
+#include <cmath>
 #include <chrono>
 #include <limits>
 
@@ -28,6 +29,8 @@
 #include <android/asset_manager.h>
 #include "TextureAsset.h"
 #include "Model.h"
+#include "../android/TouchInputHandler.h"
+#include "../usecases/CameraControlUseCase.h"
 
 // JNI関数の前方宣言
 extern "C" void setRendererReference(Renderer* renderer);
@@ -46,14 +49,15 @@ out vec2 fragUV;
 
 // 変換行列
 uniform mat4 uProjection;  // 投影行列
+uniform mat4 uView;        // ビュー行列（カメラ変換）
 uniform mat4 uModel;       // モデル行列
 
 void main() {
     // テクスチャ座標をそのまま出力（必ず使うようにする）
     fragUV = inUV;
     
-    // 頂点位置を計算
-    gl_Position = uProjection * uModel * vec4(inPosition, 1.0);
+    // 頂点位置を計算（正しいMVP変換）
+    gl_Position = uProjection * uView * uModel * vec4(inPosition, 1.0);
 }
 )vertex";
 
@@ -154,10 +158,10 @@ void Renderer::render() {
         // a placeholder projection matrix allocated on the stack. Column-major memory layout
         float projectionMatrix[16] = {0};
 
-        // build an orthographic projection matrix for 2d rendering
+        // build an orthographic projection matrix for 2d rendering (with zoom support)
         Utility::buildOrthographicMatrix(
                 projectionMatrix,
-                kProjectionHalfHeight,
+                kProjectionHalfHeight / cameraZoom_,  // ズームレベルで除算
                 float(width_) / height_,
                 kProjectionNearPlane,
                 kProjectionFarPlane);
@@ -195,6 +199,12 @@ void Renderer::render() {
     float toY = cameraTargetY_ - cameraOffsetY_;
     float maxStep = cameraSpeed_ * deltaTime;
     float dist = std::sqrt(toX * toX + toY * toY);
+    
+    // カメラターゲットが(0,0)に意図せずリセットされていないかチェック
+    if (cameraTargetX_ == 0.0f && cameraTargetY_ == 0.0f && (cameraOffsetX_ != 0.0f || cameraOffsetY_ != 0.0f)) {
+        aout << "WARNING: Camera target unexpectedly reset to (0,0)! Current offset: (" << cameraOffsetX_ << ", " << cameraOffsetY_ << ")" << std::endl;
+    }
+    
     if (dist <= maxStep || dist == 0.0f) {
         cameraOffsetX_ = cameraTargetX_;
         cameraOffsetY_ = cameraTargetY_;
@@ -203,11 +213,19 @@ void Renderer::render() {
         cameraOffsetY_ += toY / dist * maxStep;
     }
 
-    // Apply camera offset by translating the model matrix (view translation)
+    // ビュー行列を使用してカメラオフセットを適用
+    float viewMatrix[16];
+    for (int i = 0; i < 16; ++i) viewMatrix[i] = identityMatrix[i];
+    // カメラの逆移動を適用（カメラが右に移動 = 世界が左に見える）
+    viewMatrix[12] = -cameraOffsetX_;
+    viewMatrix[13] = -cameraOffsetY_;
+    
+    // モデル行列は単位行列のまま
     float modelMatrix[16];
     for (int i = 0; i < 16; ++i) modelMatrix[i] = identityMatrix[i];
-    modelMatrix[12] = cameraOffsetX_;
-    modelMatrix[13] = cameraOffsetY_;
+    
+    // シェーダーに行列を設定
+    shader_->setViewMatrix(viewMatrix);
     shader_->setModelMatrix(modelMatrix);
 
     // デバッグログ
@@ -276,32 +294,31 @@ void Renderer::render() {
         float deltaTime = 0.016f; // 仮の値: 60FPS想定で約16ms
         unitRenderer_->updateUnits(deltaTime);
         
-    // すべてのユニットを描画（カメラオフセットを渡してユニットがワールド座標で描画されるようにする）
-    unitRenderer_->render(shader_.get(), cameraOffsetX_, cameraOffsetY_);
+    // すべてのユニットを描画（ビュー行列でカメラ変換が適用される）
+    unitRenderer_->render(shader_.get());
     } else {
         aout << "unitRenderer_ is null!" << std::endl;
     }
     
-    // Draw HUD models last so they appear on top (hudModels_ are in world coordinates but
-    // we temporarily neutralize the camera offset so they render at fixed screen positions)
+    // HUDモデルを最後に描画（画面固定位置で表示）
     if (!hudModels_.empty()) {
-        // Save current model matrix
-        float savedModel[16];
-        // identityMatrix variable still available in this scope
-        for (int i = 0; i < 16; ++i) savedModel[i] = identityMatrix[i];
-
-        // Set model matrix to identity (no camera offset) for HUD
-        shader_->setModelMatrix(savedModel);
+        // HUD用に単位ビュー行列を設定（カメラオフセットなし）
+        float identityView[16];
+        for (int i = 0; i < 16; ++i) identityView[i] = identityMatrix[i];
+        
+        shader_->setViewMatrix(identityView);
+        
         for (const auto &m : hudModels_) {
             shader_->drawModel(m);
         }
 
-        // Restore camera model matrix
-        float camModel[16];
-        for (int i = 0; i < 16; ++i) camModel[i] = identityMatrix[i];
-        camModel[12] = cameraOffsetX_;
-        camModel[13] = cameraOffsetY_;
-        shader_->setModelMatrix(camModel);
+        // ワールド用ビュー行列を復元
+        float worldViewMatrix[16];
+        for (int i = 0; i < 16; ++i) worldViewMatrix[i] = identityMatrix[i];
+        worldViewMatrix[12] = -cameraOffsetX_;
+        worldViewMatrix[13] = -cameraOffsetY_;
+        
+        shader_->setViewMatrix(worldViewMatrix);
     }
 
     aout << "Frame rendering complete" << std::endl;
@@ -446,6 +463,26 @@ void Renderer::initRenderer() {
     
     // JNI用のRenderer参照を設定
     setRendererReference(this);
+    
+    // 新しいタッチ入力ハンドラーの初期化
+    touchInputHandler_ = std::make_unique<TouchInputHandler>();
+    touchInputHandler_->setTouchEventCallback([this](const TouchEvent& event) {
+        handleTouchEvent(event);
+    });
+    
+    // カメラ制御ユースケースの初期化
+    cameraControlUseCase_ = std::make_unique<CameraControlUseCase>();
+    
+    // コールバックを先に設定
+    cameraControlUseCase_->setCameraStateChangeCallback([this](const CameraState& newState) {
+        updateCameraFromState(newState);
+    });
+    
+    // レンダラーの現在のカメラ状態をユースケースに同期（コールバック設定後）
+    CameraState currentRendererState(cameraOffsetX_, cameraOffsetY_, cameraZoom_);
+    cameraControlUseCase_->setCameraInitialState(currentRendererState);
+    
+    aout << "Touch input and camera control systems initialized" << std::endl;
 }
 
 void Renderer::updateRenderArea() {
@@ -589,7 +626,7 @@ void Renderer::createModels() {
         for (int i = 0; i < 3; ++i) {
             auto u = std::make_shared<UnitEntity>(idCounter++, "PlayerUnit" + std::to_string(i+1),
                                                   Position(-2.0f, yOffsets[i]),
-                                                  UnitStats(120, 120, 6, 10, 1.0f, 0.6f, 0.5f, 0.25f),
+                                                  UnitStats(120, 120, 6, 10, 1.0f, 0.6f, 0.5f, 1.0f),
                                                   1); // faction 1
             units_.push_back(u);
             faction1Units.push_back(u);
@@ -599,7 +636,7 @@ void Renderer::createModels() {
         for (int i = 0; i < 3; ++i) {
             auto u = std::make_shared<UnitEntity>(idCounter++, "EnemyUnit" + std::to_string(i+1),
                                                   Position(2.0f, yOffsets[i]),
-                                                  UnitStats(100, 100, 4, 8, 1.0f, 0.7f, 0.4f, 0.25f),
+                                                  UnitStats(100, 100, 4, 8, 1.0f, 0.7f, 0.4f, 1.0f),
                                                   2); // faction 2
             units_.push_back(u);
             faction2Units.push_back(u);
@@ -629,8 +666,8 @@ void Renderer::createModels() {
     aout << "Created " << units_.size() << " units" << std::endl;
     aout << "Spawned 2 factions with 3 units each" << std::endl;
 
-    // MovementField を拡大（ワールド座標 -10..10 x -10..10）
-    movementField_ = std::make_unique<MovementField>(-10.0f, -10.0f, 10.0f, 10.0f);
+    // MovementField を大幅に拡大（ワールド座標 -100..100 x -100..100）- 移動制限を実質的に無効化
+    movementField_ = std::make_unique<MovementField>(-100.0f, -100.0f, 100.0f, 100.0f);
 
     // NOTE: Per request, we remove all circular obstacles from the field (no addCircleObstacle calls)
     // この変更により、フィールド上の障害物は存在しません。
@@ -685,14 +722,19 @@ void Renderer::createModels() {
 }
 
 /**
- * 入力キューを読み取り、タッチやキーイベントを処理します。
+ * 入力キューを読み取り、新しいタッチ入力システムを通じて処理します。
  *
- * 具体的には HUD ボタンによるカメラパン判定、タップ位置のワールド座標変換、
- * moveUnitToPosition 呼び出し（ユニット選択／移動）を行います。
+ * 新しいシステムでは TouchInputHandler がジェスチャーを識別し、適切なユースケース
+ * （MovementUseCase, CameraControlUseCase）に振り分けます。
  *
  * 注意: この関数は inputBuffer を消費するため、呼び出し元は別途同入力を参照しません。
  */
 void Renderer::handleInput() {
+    // TouchInputHandler の更新（タイマーベースの処理のため）
+    if (touchInputHandler_) {
+        touchInputHandler_->update();
+    }
+    
     // handle all queued inputs
     auto *inputBuffer = android_app_swap_input_buffers(app_);
     if (!inputBuffer) {
@@ -700,92 +742,24 @@ void Renderer::handleInput() {
         return;
     }
 
-    // handle motion events (motionEventsCounts can be 0).
+    // デバッグ：入力バッファの状態を確認
+    if (inputBuffer->motionEventsCount > 0) {
+        aout << "INPUT_DEBUG: Processing " << inputBuffer->motionEventsCount << " motion events" << std::endl;
+    }
+
+    // handle motion events through the new touch input system
     for (auto i = 0; i < inputBuffer->motionEventsCount; i++) {
         auto &motionEvent = inputBuffer->motionEvents[i];
-        auto action = motionEvent.action;
-
-        // Find the pointer index, mask and bitshift to turn it into a readable value.
-        auto pointerIndex = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK)
-                >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-        aout << "Pointer(s): ";
-
-        // get the x and y position of this event if it is not ACTION_MOVE.
-        auto &pointer = motionEvent.pointers[pointerIndex];
-        auto x = GameActivityPointerAxes_getX(&pointer);
-        auto y = GameActivityPointerAxes_getY(&pointer);
-
-        // determine the action type and process the event accordingly.
-        switch (action & AMOTION_EVENT_ACTION_MASK) {
-            case AMOTION_EVENT_ACTION_DOWN:
-            case AMOTION_EVENT_ACTION_POINTER_DOWN:
-                aout << "(" << pointer.id << ", " << x << ", " << y << ") "
-                     << "Pointer Down";
-                {
-                    // まず、HUDボタン領域内のタップかをチェック
-                    bool handledByHud = false;
-                    if (x >= btnUp_.x && x <= btnUp_.x + btnUp_.w && y >= btnUp_.y && y <= btnUp_.y + btnUp_.h) {
-                        // 上へパン
-                        cameraOffsetY_ += 0.5f; handledByHud = true;
-                    } else if (x >= btnDown_.x && x <= btnDown_.x + btnDown_.w && y >= btnDown_.y && y <= btnDown_.y + btnDown_.h) {
-                        // 下へパン
-                        cameraOffsetY_ -= 0.5f; handledByHud = true;
-                    } else if (x >= btnLeft_.x && x <= btnLeft_.x + btnLeft_.w && y >= btnLeft_.y && y <= btnLeft_.y + btnLeft_.h) {
-                        // 左へパン
-                        cameraOffsetX_ -= 0.5f; handledByHud = true;
-                    } else if (x >= btnRight_.x && x <= btnRight_.x + btnRight_.w && y >= btnRight_.y && y <= btnRight_.y + btnRight_.h) {
-                        // 右へパン
-                        cameraOffsetX_ += 0.5f; handledByHud = true;
-                    }
-
-                    if (!handledByHud) {
-                        // タッチされた場所にユニットを移動（ワールド座標に変換）
-                        float worldX, worldY;
-                        screenToWorldCoordinates(x, y, worldX, worldY);
-                        // ワールド座標にカメラオフセットを適用して、実際にタップされたワールド位置を補正
-                        worldX += cameraOffsetX_;
-                        worldY += cameraOffsetY_;
-                        moveUnitToPosition(worldX, worldY);
-                    } else {
-                        aout << "HUD button handled - camera offset now (" << cameraOffsetX_ << ", " << cameraOffsetY_ << ")" << std::endl;
-                    }
-                }
-                break;
-
-            case AMOTION_EVENT_ACTION_CANCEL:
-                // treat the CANCEL as an UP event: doing nothing in the app, except
-                // removing the pointer from the cache if pointers are locally saved.
-                // code pass through on purpose.
-            case AMOTION_EVENT_ACTION_UP:
-            case AMOTION_EVENT_ACTION_POINTER_UP:
-                aout << "(" << pointer.id << ", " << x << ", " << y << ") "
-                     << "Pointer Up";
-                break;
-
-            case AMOTION_EVENT_ACTION_MOVE:
-                // There is no pointer index for ACTION_MOVE, only a snapshot of
-                // all active pointers; app needs to cache previous active pointers
-                // to figure out which ones are actually moved.
-                for (auto index = 0; index < motionEvent.pointerCount; index++) {
-                    pointer = motionEvent.pointers[index];
-                    x = GameActivityPointerAxes_getX(&pointer);
-                    y = GameActivityPointerAxes_getY(&pointer);
-                    aout << "(" << pointer.id << ", " << x << ", " << y << ")";
-
-                    if (index != (motionEvent.pointerCount - 1)) aout << ",";
-                    aout << " ";
-                }
-                aout << "Pointer Move";
-                break;
-            default:
-                aout << "Unknown MotionEvent Action: " << action;
+        
+        // 新しいタッチ入力ハンドラーで処理
+        if (touchInputHandler_) {
+            touchInputHandler_->handleMotionEvent(motionEvent);
         }
-        aout << std::endl;
     }
     // clear the motion input count in this buffer for main thread to re-use.
     android_app_clear_motion_events(inputBuffer);
 
-    // handle input key events.
+    // handle input key events (キーイベント処理は従来どおり)
     for (auto i = 0; i < inputBuffer->keyEventsCount; i++) {
         auto &keyEvent = inputBuffer->keyEvents[i];
         aout << "Key: " << keyEvent.keyCode <<" ";
@@ -830,25 +804,29 @@ void Renderer::screenToWorldCoordinates(float screenX, float screenY, float& wor
         return;
     }
 
+    // Screen to NDC conversion
     float ndcX = (screenX / static_cast<float>(width_)) * 2.0f - 1.0f;
     float ndcY = 1.0f - (screenY / static_cast<float>(height_)) * 2.0f;
 
-    // Projection half extents defined by kProjectionHalfHeight and aspect
-    const float halfHeight = kProjectionHalfHeight; // e.g., 5.0f
+    // 投影行列と同じパラメータを使用
+    const float halfHeight = kProjectionHalfHeight / cameraZoom_;
     const float aspect = static_cast<float>(width_) / static_cast<float>(height_);
     const float halfWidth = halfHeight * aspect;
 
-    // Inverse projection: map NDC back to world coordinates
-    float projWorldX = ndcX * halfWidth;
-    float projWorldY = ndcY * halfHeight;
+    // 投影行列の逆変換: NDC → ビュー座標
+    // 投影行列: [1/halfWidth, 0, 0, 0; 0, 1/halfHeight, 0, 0; ...]
+    // 逆変換: viewX = ndcX * halfWidth, viewY = ndcY * halfHeight
+    float viewX = ndcX * halfWidth;
+    float viewY = ndcY * halfHeight;
 
-    // Account for camera/model translation applied during rendering
-    // During rendering, model matrix used: modelTranslation = position + cameraOffset
-    // Therefore, to recover world position before model translation, subtract camera offsets.
-    worldX = projWorldX - cameraOffsetX_;
-    worldY = projWorldY - cameraOffsetY_;
+    // ビュー行列の逆変換: ビュー座標 → ワールド座標
+    // ビュー行列: viewPos = worldPos - cameraOffset
+    // 逆変換: worldPos = viewPos + cameraOffset
+    worldX = viewX + cameraOffsetX_;
+    worldY = viewY + cameraOffsetY_;
 
-    aout << "Screen (" << screenX << ", " << screenY << ") -> NDC (" << ndcX << ", " << ndcY << ") -> World (" << worldX << ", " << worldY << ")" << std::endl;
+    // デバッグ情報（簡略化）
+    aout << "Screen(" << screenX << ", " << screenY << ") -> World(" << worldX << ", " << worldY << ")" << std::endl;
 }
 
 /**
@@ -925,7 +903,256 @@ void Renderer::moveUnitToPosition(float x, float y) {
     }
 }
 
+std::shared_ptr<UnitEntity> Renderer::findUnitAtPosition(float worldX, float worldY) const {
+    aout << "UNIT_SEARCH: Searching for unit at world position (" << worldX << ", " << worldY << ")" << std::endl;
+    aout << "UNIT_SEARCH: Total units to check: " << units_.size() << std::endl;
+    
+    std::shared_ptr<UnitEntity> closestUnit = nullptr;
+    float closestDistance = std::numeric_limits<float>::max();
+    
+    for (size_t i = 0; i < units_.size(); ++i) {
+        const auto& unit = units_[i];
+        if (!unit || !unit->isAlive()) {
+            aout << "UNIT_SEARCH: Unit[" << i << "] is null or dead, skipping" << std::endl;
+            continue; // 死亡ユニットは無視
+        }
+        
+        // ユニットとタッチ位置の距離を計算
+        Position unitPos = unit->getPosition();
+        float dx = worldX - unitPos.getX();
+        float dy = worldY - unitPos.getY();
+        float distance = std::sqrt(dx * dx + dy * dy);
+        
+        // ユニットの衝突半径内にタッチ位置があるかチェック
+        float collisionRadius = unit->getStats().getCollisionRadius();
+        
+        aout << "UNIT_SEARCH: Unit[" << i << "] " << unit->getName() 
+             << " at (" << unitPos.getX() << ", " << unitPos.getY() 
+             << "), distance=" << distance << ", radius=" << collisionRadius << std::endl;
+        
+        if (distance <= collisionRadius) {
+            aout << "UNIT_SEARCH: Unit[" << i << "] is within collision radius!" << std::endl;
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestUnit = unit;
+                aout << "UNIT_SEARCH: Unit[" << i << "] is now the closest unit" << std::endl;
+            }
+        }
+    }
+    
+    if (closestUnit) {
+        aout << "UNIT_SEARCH: Found unit: " << closestUnit->getName() 
+             << " (distance: " << closestDistance << ")" << std::endl;
+    } else {
+        aout << "UNIT_SEARCH: No unit found at position (" << worldX << ", " << worldY << ")" << std::endl;
+    }
+    
+    return closestUnit;
+}
+
+void Renderer::notifyUnitSelectedToAndroid(int unitId) {
+    // グローバル変数を直接設定する（UnitStatusJNI.cppで定義されている）
+    extern int g_selectedUnitId;
+    extern int g_persistSelectedUnitId;
+    g_selectedUnitId = unitId;
+    g_persistSelectedUnitId = unitId;
+    aout << "Notified Android of unit selection: " << unitId << std::endl;
+}
+
 // 単純なアクセサ実装（借用ポインタを返す）
 UnitRenderer* Renderer::getUnitRenderer() const {
     return unitRenderer_.get();
+}
+
+/**
+ * タッチイベントを処理します（TouchInputHandlerからのコールバック）。
+ * タッチの種類に応じて適切なユースケースに振り分けます。
+ */
+void Renderer::handleTouchEvent(const TouchEvent& event) {
+    aout << "RENDERER_DEBUG: TouchEvent received - type: " << static_cast<int>(event.type) 
+         << ", pos: (" << event.x << ", " << event.y << "), scale: " << event.scale << std::endl;
+    
+    switch (event.type) {
+        case TouchInputType::SHORT_TAP: {
+            // ショートタップ：ユニット移動を実行
+            aout << "Short tap detected at screen (" << event.x << ", " << event.y << ")" << std::endl;
+            
+            // HUDボタンのチェック（従来の機能を維持）
+            bool handledByHud = false;
+            if (event.x >= btnUp_.x && event.x <= btnUp_.x + btnUp_.w && 
+                event.y >= btnUp_.y && event.y <= btnUp_.y + btnUp_.h) {
+                if (cameraControlUseCase_) {
+                    cameraControlUseCase_->panCameraBy(0.0f, 0.5f);
+                }
+                handledByHud = true;
+            } else if (event.x >= btnDown_.x && event.x <= btnDown_.x + btnDown_.w && 
+                       event.y >= btnDown_.y && event.y <= btnDown_.y + btnDown_.h) {
+                if (cameraControlUseCase_) {
+                    cameraControlUseCase_->panCameraBy(0.0f, -0.5f);
+                }
+                handledByHud = true;
+            } else if (event.x >= btnLeft_.x && event.x <= btnLeft_.x + btnLeft_.w && 
+                       event.y >= btnLeft_.y && event.y <= btnLeft_.y + btnLeft_.h) {
+                if (cameraControlUseCase_) {
+                    cameraControlUseCase_->panCameraBy(-0.5f, 0.0f);
+                }
+                handledByHud = true;
+            } else if (event.x >= btnRight_.x && event.x <= btnRight_.x + btnRight_.w && 
+                       event.y >= btnRight_.y && event.y <= btnRight_.y + btnRight_.h) {
+                if (cameraControlUseCase_) {
+                    cameraControlUseCase_->panCameraBy(0.5f, 0.0f);
+                }
+                handledByHud = true;
+            }
+            
+            if (!handledByHud) {
+                aout << "DEBUG_TOUCH: Processing non-HUD touch at screen (" << event.x << ", " << event.y << ")" << std::endl;
+                
+                // スクリーン座標をワールド座標に変換
+                float worldX, worldY;
+                screenToWorldCoordinates(event.x, event.y, worldX, worldY);
+                
+                aout << "DEBUG_TOUCH: Converted to world coordinates (" << worldX << ", " << worldY << ")" << std::endl;
+                
+                // まずタッチした位置にユニットがあるかチェック
+                std::shared_ptr<UnitEntity> touchedUnit = findUnitAtPosition(worldX, worldY);
+                
+                if (touchedUnit) {
+                    // ユニットがタッチされた場合：ステータス表示（移動制限に関係なく常に実行）
+                    aout << "SHORT_TAP: Unit touched - showing status for " << touchedUnit->getName() 
+                         << " (ID: " << touchedUnit->getId() << ")" << std::endl;
+                    
+                    // Android側にユニット選択を通知
+                    aout << "DEBUG_TOUCH: Calling notifyUnitSelectedToAndroid with ID " << touchedUnit->getId() << std::endl;
+                    notifyUnitSelectedToAndroid(touchedUnit->getId());
+                    aout << "DEBUG_TOUCH: notifyUnitSelectedToAndroid completed" << std::endl;
+                    
+                } else {
+                    // 空の場所をタッチした場合：ユニット移動（移動制限チェックあり）
+                    aout << "DEBUG_TOUCH: No unit found at touch position" << std::endl;
+                    if (movementUseCase_ && movementUseCase_->isMovementEnabled()) {
+                        aout << "SHORT_TAP: Empty space touched - moving unit to world position (" << worldX << ", " << worldY << ")" << std::endl;
+                        moveUnitToPosition(worldX, worldY);
+                    } else {
+                        aout << "SHORT_TAP: Empty space touched but unit movement is disabled during camera operations" << std::endl;
+                    }
+                }
+            } else {
+                aout << "DEBUG_TOUCH: Touch handled by HUD" << std::endl;
+            }
+            break;
+        }
+        
+        case TouchInputType::LONG_TAP: {
+            // ロングタップ：カメラパン（カメラを指定位置に移動）
+            aout << "Long tap detected at screen (" << event.x << ", " << event.y << ")" << std::endl;
+            
+            // スクリーン座標をワールド座標に変換（タッチした位置）
+            float touchWorldX, touchWorldY;
+            screenToWorldCoordinates(event.x, event.y, touchWorldX, touchWorldY);
+            
+            // 現在のカメラ中心位置をワールド座標で取得
+            // 画面中央 (width_/2, height_/2) をワールド座標に変換
+            float currentCameraWorldX, currentCameraWorldY;
+            screenToWorldCoordinates(width_ / 2.0f, height_ / 2.0f, currentCameraWorldX, currentCameraWorldY);
+            
+            // 座標変換の検証用ログ
+            aout << "COORDINATE_TEST: Screen center(" << width_/2.0f << ", " << height_/2.0f 
+                 << ") -> World(" << currentCameraWorldX << ", " << currentCameraWorldY << ")" << std::endl;
+            aout << "COORDINATE_TEST: Touch screen(" << event.x << ", " << event.y 
+                 << ") -> World(" << touchWorldX << ", " << touchWorldY << ")" << std::endl;
+            aout << "COORDINATE_TEST: Camera state - Offset(" << cameraOffsetX_ << ", " << cameraOffsetY_ 
+                 << ") Zoom(" << cameraZoom_ << ")" << std::endl;
+            
+            // 現在のカメラ位置からタッチした位置への移動ベクトルを計算
+            float moveVectorX = touchWorldX - currentCameraWorldX;
+            float moveVectorY = touchWorldY - currentCameraWorldY;
+            
+            aout << "LONG_TAP DEBUG: Current camera center (" << currentCameraWorldX << ", " << currentCameraWorldY 
+                 << ") -> Touch world pos (" << touchWorldX << ", " << touchWorldY 
+                 << ") -> Move vector (" << moveVectorX << ", " << moveVectorY << ")" << std::endl;
+            
+            // スムーズカメラ移動：ターゲット位置を設定してスムーズに移動
+            // 即座に移動するのではなく、cameraTarget_を設定してスムーズカメラシステムに任せる
+            cameraTargetX_ = cameraOffsetX_ + moveVectorX;
+            cameraTargetY_ = cameraOffsetY_ + moveVectorY;
+            
+            aout << "Smooth camera movement: target set to (" << cameraTargetX_ << ", " << cameraTargetY_ << ")" << std::endl;
+            
+            // ロングタップ中はユニット移動を無効化
+            if (movementUseCase_) {
+                movementUseCase_->setMovementEnabled(false, "Long tap camera pan");
+            }
+            break;
+        }
+        
+        case TouchInputType::LONG_TAP_END: {
+            // ロングタップ終了：ユニット移動を再有効化
+            aout << "Long tap ended - re-enabling unit movement" << std::endl;
+            if (movementUseCase_) {
+                movementUseCase_->setMovementEnabled(true, "Long tap camera pan ended");
+            }
+            break;
+        }
+        
+        case TouchInputType::PINCH_ZOOM: {
+            // ピンチズーム：カメラズーム
+            aout << "PINCH_DEBUG: event.scale=" << event.scale << " centerX=" << event.centerX << " centerY=" << event.centerY << std::endl;
+            
+            if (std::abs(event.scale - 1.0f) < 0.01f) {
+                // ピンチ開始 (scale が 1.0 に近い場合) - ユニット移動を無効化
+                aout << "Pinch started - disabling unit movement" << std::endl;
+                if (movementUseCase_) {
+                    movementUseCase_->setMovementEnabled(false, "Pinch zoom started");
+                }
+            } else {
+                // 通常のピンチズーム処理
+                aout << "Pinch zoom detected, scale: " << event.scale 
+                     << " center: (" << event.centerX << ", " << event.centerY << ")" << std::endl;
+                
+                // カメラズームを実行前に現在位置を同期
+                if (cameraControlUseCase_) {
+                    cameraControlUseCase_->updateCurrentPosition(cameraOffsetX_, cameraOffsetY_);
+                    cameraControlUseCase_->zoomCamera(event.scale, event.centerX, event.centerY);
+                }
+            }
+            break;
+        }
+        
+        case TouchInputType::PINCH_END: {
+            // ピンチ終了：ユニット移動を再有効化
+            aout << "Pinch ended - re-enabling unit movement" << std::endl;
+            if (movementUseCase_) {
+                movementUseCase_->setMovementEnabled(true, "Pinch zoom ended");
+            }
+            break;
+        }
+        
+        default:
+            aout << "Unhandled touch event type" << std::endl;
+            break;
+    }
+}
+
+/**
+ * カメラ状態の変更を反映します（CameraControlUseCaseからのコールバック）。
+ */
+void Renderer::updateCameraFromState(const CameraState& newState) {
+    bool zoomChanged = (cameraZoom_ != newState.zoomLevel);
+    
+    cameraOffsetX_ = newState.offsetX;
+    cameraOffsetY_ = newState.offsetY;
+    cameraZoom_ = newState.zoomLevel;
+    
+    // スムーズカメラのターゲットも同時に更新
+    cameraTargetX_ = newState.offsetX;
+    cameraTargetY_ = newState.offsetY;
+    
+    // ズームレベルが変更された場合はプロジェクション行列を再生成
+    if (zoomChanged) {
+        shaderNeedsNewProjectionMatrix_ = true;
+    }
+    
+    aout << "Camera updated: offset(" << cameraOffsetX_ << ", " << cameraOffsetY_ 
+         << ") target(" << cameraTargetX_ << ", " << cameraTargetY_ << ") zoom(" << cameraZoom_ << ")" << std::endl;
 }

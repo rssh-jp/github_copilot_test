@@ -66,6 +66,31 @@ class StatusBoardView @JvmOverloads constructor(
     }
 
     /**
+     * ユニットステータス情報を表示します。
+     */
+    fun showUnitStatus(name: String, hp: Int, maxHp: Int, attack: String, defense: Int, 
+                      posX: Float, posY: Float, targetX: Float, targetY: Float) {
+        val statusText = buildString {
+            appendLine("=== ユニット情報 ===")
+            appendLine("名前: $name")
+            appendLine("HP: $hp / $maxHp")
+            appendLine("攻撃力: $attack")
+            appendLine("防御力: $defense")
+            appendLine("位置: (${String.format("%.1f", posX)}, ${String.format("%.1f", posY)})")
+            appendLine("目標: (${String.format("%.1f", targetX)}, ${String.format("%.1f", targetY)})")
+        }
+        setText(statusText)
+        visibility = View.VISIBLE
+    }
+
+    /**
+     * ステータスボードを非表示にします。
+     */
+    fun hideStatus() {
+        visibility = View.GONE
+    }
+
+    /**
      * Show or hide the button container. When hidden, existing buttons remain but are not visible.
      */
     fun setButtonsVisible(visible: Boolean) {

@@ -35,9 +35,9 @@
 // グローバル変数でRenderer参照を保持
 static Renderer* g_renderer = nullptr;
 // currently selected unit id (set by touch hit-test). -1 = none
-static int g_selectedUnitId = -1;
+int g_selectedUnitId = -1;
 // persisted last selected unit id so UI can keep polling its state until explicitly cleared
-static int g_persistSelectedUnitId = -1;
+int g_persistSelectedUnitId = -1;
 
 // Rendererの参照を設定する関数（他のファイルから呼ばれる）
 extern "C" void setRendererReference(Renderer* renderer) {
@@ -171,16 +171,15 @@ Java_com_example_testgame_MainActivity_onTouch(JNIEnv *env, jobject /* this */, 
         return JNI_TRUE; // indicate selection occurred
     }
 
-    // No unit hit: clear selection and treat as move command for player unit (id=1)
+    // No unit hit: clear selection and issue move command via Renderer's moveUnitToPosition
+    // This method will use the proper TouchInputHandler system internally
     g_selectedUnitId = -1;
-    auto player = unitRenderer->getUnit(1);
-    if (!player) {
-        LOGE("Player unit not found for touch processing");
-        return JNI_FALSE;
-    }
-    player->setTargetPosition(Position(worldX, worldY));
-    player->setState(UnitState::MOVING);
-    return JNI_FALSE; // indicate no selection (move issued)
+    
+    // Use the public moveUnitToPosition method which integrates with the new TouchInputHandler system
+    g_renderer->moveUnitToPosition(worldX, worldY);
+    
+    LOGI("Move command issued via moveUnitToPosition at world position (%.3f, %.3f)", worldX, worldY);
+    return JNI_FALSE; // indicate no selection (move command issued)
 }
 
 /**
@@ -513,4 +512,34 @@ Java_com_example_testgame_MainActivity_moveSelectedUnitToRandomInView(JNIEnv *en
     unit->setState(UnitState::MOVING);
     LOGI("Moved persisted unit %d to random visible pos (%.3f, %.3f)", g_persistSelectedUnitId, rx, ry);
     return JNI_TRUE;
+}
+
+/**
+ * ユニットがタッチで選択されたことをAndroid側に通知します。
+ * @param unitId 選択されたユニットのID
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_testgame_GameActivity_notifyUnitSelected(JNIEnv *env, jobject /* this */, jint unitId) {
+    g_selectedUnitId = unitId;
+    g_persistSelectedUnitId = unitId;
+    LOGI("Unit %d selected and persisted for status display", unitId);
+}
+
+/**
+ * 選択されたユニットのIDを取得します。
+ * @return 選択されたユニットのID、選択なしの場合は-1
+ */
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_testgame_GameActivity_getSelectedUnitId(JNIEnv *env, jobject /* this */) {
+    return g_selectedUnitId;
+}
+
+/**
+ * ユニット選択をクリアします。
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_testgame_GameActivity_clearUnitSelection(JNIEnv *env, jobject /* this */) {
+    g_selectedUnitId = -1;
+    g_persistSelectedUnitId = -1;
+    LOGI("Unit selection cleared");
 }

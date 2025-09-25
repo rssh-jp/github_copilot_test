@@ -2,10 +2,11 @@
 #include <algorithm>
 #include <cmath>
 #include "../domain/services/MovementField.h"
+#include "../frameworks/android/AndroidOut.h"
 
 MovementUseCase::MovementUseCase(std::vector<std::shared_ptr<UnitEntity>>& units,
     const MovementField* movementField)
-    : units_(units), movementField_(movementField) {
+    : units_(units), movementField_(movementField), movementEnabled_(true) {
 }
 
 void MovementUseCase::setMovementEventCallback(MovementEventCallback callback) {
@@ -20,12 +21,25 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
     /**
      * Move the specified unit towards targetPosition.
      * Behavior:
+     * - Validates movement is enabled (new check for touch input control).
      * - Validates unit existence and liveliness.
      * - If a MovementField is configured, snaps the target inside the field and validates walkability.
      * - Calculates an avoidance-aware actual target using CollisionDomainService and sets the unit's
      *   targetPosition accordingly.
      * - Emits movementEventCallback_ with the from/to positions when movement is started.
      */
+    
+    // 移動が無効化されている場合は処理しない
+    if (!movementEnabled_) {
+        if (movementFailedCallback_) {
+            auto unit = findUnitById(unitId);
+            if (unit) {
+                movementFailedCallback_(*unit, targetPosition, "Unit movement is currently disabled");
+            }
+        }
+        return false;
+    }
+    
     auto unit = findUnitById(unitId);
     if (!unit) {
         return false; // ユニットが見つからない
@@ -42,7 +56,10 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
     auto otherUnits = getOtherUnits(*unit);
 
     // MovementField がある場合はターゲットをフィールド内にスナップし、歩行可能か確認
+    // 移動制限を無効化（デバッグ用）
     Position desiredTarget = targetPosition;
+    // 移動制限チェックをスキップしてユニット移動を自由にする
+    /*
     if (movementField_) {
         desiredTarget = movementField_->snapInside(desiredTarget);
         if (!movementField_->isWalkable(desiredTarget, unit->getStats().getCollisionRadius())) {
@@ -52,6 +69,7 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
             return false;
         }
     }
+    */
 
     // 衝突回避を考慮した実際の移動先を計算
     Position actualTarget = CollisionDomainService::calculateAvoidancePosition(
@@ -212,11 +230,13 @@ bool MovementUseCase::canMoveToPosition(int unitId, const Position& targetPositi
     auto otherUnits = getOtherUnits(*unit);
 
     // MovementField がある場合はフィールド上で歩行可能かチェック
-    // If a movement field exists, snap and validate walkability first.
+    // 移動制限チェックを無効化（デバッグ用）
+    /*
     if (movementField_) {
         Position snapped = movementField_->snapInside(targetPosition);
         if (!movementField_->isWalkable(snapped, unit->getStats().getCollisionRadius())) return false;
     }
+    */
 
     // Delegate detailed collision/path checks to CollisionDomainService.
     return CollisionDomainService::canMoveTo(*unit, targetPosition, otherUnits);
@@ -250,4 +270,16 @@ std::vector<std::shared_ptr<UnitEntity>> MovementUseCase::getOtherUnits(const Un
     }
     
     return otherUnits;
+}
+
+void MovementUseCase::setMovementEnabled(bool enabled, const std::string& reason) {
+    if (movementEnabled_ != enabled) {
+        movementEnabled_ = enabled;
+        // ログ出力は AndroidOut を使用しないため、コンソール出力はしない
+        // 必要に応じて movementFailedCallback_ 等で通知
+    }
+}
+
+bool MovementUseCase::isMovementEnabled() const {
+    return movementEnabled_;
 }

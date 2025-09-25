@@ -10,8 +10,10 @@
 #include "UnitRenderer.h"
 #include "../../usecases/CombatUseCase.h"
 #include "../../usecases/MovementUseCase.h"
+#include "../../usecases/CameraControlUseCase.h"
 // MovementField is used by Renderer as a concrete type for the movement field instance
 #include "../../domain/services/MovementField.h"
+#include "../android/TouchInputHandler.h"
 
 struct android_app;
 
@@ -110,6 +112,7 @@ private:
      */
     void screenToWorldCoordinates(float screenX, float screenY, float& worldX, float& worldY) const;
     
+public:
     /**
      * 指定したゲーム内座標へプレイヤーユニット（または選択ユニット）を移動させるユースケース呼び出しを行います。
      *
@@ -120,6 +123,26 @@ private:
      * @param y ゲーム内Y座標
      */
     void moveUnitToPosition(float x, float y);
+    
+    /**
+     * 指定したワールド座標にあるユニットを検出します。
+     * @param worldX ワールド座標のX位置
+     * @param worldY ワールド座標のY位置
+     * @return 見つかったユニットのポインタ、見つからなければnullptr
+     */
+    std::shared_ptr<UnitEntity> findUnitAtPosition(float worldX, float worldY) const;
+    
+    /**
+     * タッチイベントを処理します（TouchInputHandlerからのコールバック）。
+     * @param event 処理するタッチイベント
+     */
+    void handleTouchEvent(const TouchEvent& event);
+    
+    /**
+     * カメラ状態の変更を反映します（CameraControlUseCaseからのコールバック）。
+     * @param newState 新しいカメラ状態
+     */
+    void updateCameraFromState(const CameraState& newState);
 
 private:
     android_app *app_;
@@ -141,16 +164,24 @@ private:
     // ユースケース
     std::unique_ptr<CombatUseCase> combatUseCase_;
     std::unique_ptr<MovementUseCase> movementUseCase_;
+    std::unique_ptr<CameraControlUseCase> cameraControlUseCase_;
     // Movement field for walkability and obstacles
     std::unique_ptr<class MovementField> movementField_;
+    
+    // 新しいタッチ入力システム
+    std::unique_ptr<TouchInputHandler> touchInputHandler_;
+
+    // ヘルパー関数：JNI経由でAndroid側にユニット選択を通知
+    void notifyUnitSelectedToAndroid(int unitId);
 
     // Camera / view offset (world coordinates). These allow panning the view.
     float cameraOffsetX_ = 0.0f;
-    float cameraOffsetY_ = 0.0f;
+    float cameraOffsetY_ = 0.0f;  // 原点を中心に表示
+    float cameraZoom_ = 1.0f;  // 新しいズーム状態
 
     // Smooth camera target and speed
     float cameraTargetX_ = 0.0f;
-    float cameraTargetY_ = 0.0f;
+    float cameraTargetY_ = 0.0f;  // 初期ターゲットも同じ位置
     // units per second camera speed
     float cameraSpeed_ = 3.0f;
 

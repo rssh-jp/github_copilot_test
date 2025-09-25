@@ -81,6 +81,7 @@ public:
      * Sets the model matrix in the shader.
      * @param modelMatrix sixteen floats, column major, defining a model transformation matrix.
      */
+    void setViewMatrix(float *viewMatrix) const;
     void setModelMatrix(float *modelMatrix) const;
 
 private:
@@ -104,17 +105,20 @@ private:
             GLint position,
             GLint uv,
             GLint projectionMatrix,
+            GLint viewMatrix,
             GLint modelMatrix)
             : program_(program),
               position_(position),
               uv_(uv),
               projectionMatrix_(projectionMatrix),
+              viewMatrix_(viewMatrix),
               modelMatrix_(modelMatrix) {}
 
     GLuint program_;
     GLint position_;
     GLint uv_;
     GLint projectionMatrix_;
+    GLint viewMatrix_;
     GLint modelMatrix_;
 };
 

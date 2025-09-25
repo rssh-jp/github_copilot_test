@@ -64,7 +64,7 @@ public:
      */
     // Render units using the provided shader. Provide camera offsets so unit renderer
     // can correctly place units in the world relative to the camera.
-    void render(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
+    void render(const Shader* shader);
     
     /**
      * @brief 特定のユニットのHPバーを描画する
@@ -72,7 +72,7 @@ public:
      * @param shader 描画に使用するシェーダー
      * @param unit HPバーを描画するユニット
      */
-    void renderHPBar(const Shader* shader, const std::shared_ptr<UnitEntity>& unit, float cameraOffsetX, float cameraOffsetY);
+    void renderHPBar(const Shader* shader, const std::shared_ptr<UnitEntity>& unit);
     
     /**
      * @brief すべてのユニットの状態を更新する
@@ -123,13 +123,13 @@ public:
     /**
      * @brief 当たり判定ワイヤーフレームを描画する
      */
-    void renderCollisionWireframes(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
+    void renderCollisionWireframes(const Shader* shader);
     /**
      * @brief 攻撃範囲（attack range）を描画する
      *
      * デバッグ／ビジュアル目的で、各ユニットの攻撃範囲を円として描画します。
      */
-    void renderAttackRanges(const Shader* shader, float cameraOffsetX, float cameraOffsetY);
+    void renderAttackRanges(const Shader* shader);
 
 private:
     // ユニットのモデルデータを生成する

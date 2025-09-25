@@ -79,11 +79,27 @@ public:
      */
     bool canMoveToPosition(int unitId, const Position& targetPosition) const;
 
+    /**
+     * @brief ユニット移動を有効化/無効化
+     * @param enabled 移動を有効にするかどうか
+     * @param reason 無効化する理由（ログ用）
+     */
+    void setMovementEnabled(bool enabled, const std::string& reason = "");
+
+    /**
+     * @brief 現在ユニット移動が有効かどうかを取得
+     * @return 移動が有効かどうか
+     */
+    bool isMovementEnabled() const;
+
 private:
     std::vector<std::shared_ptr<UnitEntity>>& units_;
     const class MovementField* movementField_ = nullptr;
     MovementEventCallback movementEventCallback_;
     MovementFailedCallback movementFailedCallback_;
+    
+    // 移動制御フラグ
+    bool movementEnabled_;
 
     /**
      * @brief ユニットIDからユニットを検索

@@ -40,8 +40,14 @@ class MainActivity : GameActivity() {
     private external fun getTargetPositionX(): Float
     private external fun getTargetPositionY(): Float
     private external fun getUnitStatusString(): String
+    
     // Clear persisted selected unit in native side
-    private external fun clearPersistSelectedUnit()
+    private external fun clearPersistSelectUnit()
+    
+    // JNI Native functions - ユニット選択関連
+    private external fun getSelectedUnitId(): Int
+    private external fun clearUnitSelection()
+    
     // JNI Native functions - Renderer status (camera / HUD)
     private external fun getCameraOffsetX(): Float
     private external fun getCameraOffsetY(): Float
@@ -101,8 +107,16 @@ class MainActivity : GameActivity() {
                     val f3 = (packed shr 16) and 0xFF
                     val f4 = (packed shr 24) and 0xFF
                     val worldText = String.format("Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs", camX, camY, f1, f2, f3, f4, elapsed)
+                    // 左上のステータスボードは常にワールド情報を表示
                     statusBoard.setText(worldText)
                     statusBoard.setButtonsVisible(false)
+                    
+                    // ユニット選択チェック - 中央ダイアログで表示
+                    val selectedUnitId = getSelectedUnitId()
+                    if (selectedUnitId >= 0) {
+                        // ユニットが選択されている場合：中央ダイアログでステータス表示をリクエスト
+                        centerDialogShowRequested = true
+                    }
 
                     // Now check for a selected unit; if present, show a centered dialog with details
                     val unitName = getUnitName()
@@ -133,7 +147,7 @@ class MainActivity : GameActivity() {
                                 centerUnitDialog = dialog
                             }
 
-                            // populate dialog text and buttons from the selected unit
+                            // populate dialog with unit status using the new showUnitStatus method
                             val dialog = centerUnitDialog!!
                             val name = unitName
                             val curHp = getCurrentHp()
@@ -143,12 +157,11 @@ class MainActivity : GameActivity() {
                             val def = getDefense()
                             val px = getPositionX()
                             val py = getPositionY()
-                            val status = getUnitStatusString()
                             val tx = getTargetPositionX()
                             val ty = getTargetPositionY()
-                            val text = String.format("%s\nHP: %d/%d\nATK: %d-%d DEF: %d\nPos: %.1f, %.1f\nTarget: %.1f, %.1f\nState: %s",
-                                name, curHp, maxHp, minAtk, maxAtk, def, px, py, tx, ty, status)
-                            dialog.setText(text)
+                            
+                            val attackText = if (minAtk == maxAtk) minAtk.toString() else "$minAtk-$maxAtk"
+                            dialog.showUnitStatus(name, curHp, maxHp, attackText, def, px, py, tx, ty)
                             dialog.configureButtons(
                                 Triple("Move", View.generateViewId()) {
                                     // Move the currently persisted selected unit to a random visible location
@@ -171,7 +184,8 @@ class MainActivity : GameActivity() {
                                     dialog.visibility = View.GONE
                                     centerDialogShowRequested = false
                                     try {
-                                        clearPersistSelectedUnit()
+                                        clearUnitSelection() // 新しいユニット選択システムをクリア
+                                        clearPersistSelectUnit() // 従来のシステムもクリア
                                     } catch (e: Throwable) {
                                         // ignore
                                     }
@@ -268,74 +282,9 @@ class MainActivity : GameActivity() {
             // ignore if switch not found or APIs missing
         }
 
-        // Forward touches on the overlay (outside of buttons) to native onTouch with raw screen coordinates
-        overlay.setOnTouchListener { v, ev ->
-            if (ev.action == android.view.MotionEvent.ACTION_DOWN) {
-                val rawX = ev.rawX
-                val rawY = ev.rawY
-
-                // If the touch is inside any of the pan buttons, do not forward — let buttons handle it
-                val buttons = listOf(btnUp, btnDown, btnLeft, btnRight)
-                for (btn in buttons) {
-                    val loc = IntArray(2)
-                    btn.getLocationOnScreen(loc)
-                    val bx = loc[0].toFloat()
-                    val by = loc[1].toFloat()
-                    val bw = btn.width.toFloat()
-                    val bh = btn.height.toFloat()
-                    if (rawX >= bx && rawX <= bx + bw && rawY >= by && rawY <= by + bh) {
-                        // let the button receive the touch
-                        return@setOnTouchListener false
-                    }
-                }
-
-                // If the touch is inside the top-left status board, let it handle the touch so its buttons work
-                try {
-                    val loc = IntArray(2)
-                    statusBoard.getLocationOnScreen(loc)
-                    val sx = loc[0].toFloat()
-                    val sy = loc[1].toFloat()
-                    val sw = statusBoard.width.toFloat()
-                    val sh = statusBoard.height.toFloat()
-                    if (rawX >= sx && rawX <= sx + sw && rawY >= sy && rawY <= sy + sh) {
-                        return@setOnTouchListener false
-                    }
-                } catch (e: Throwable) {
-                    // ignore if statusBoard not laid out yet
-                }
-
-                // If a centered dialog exists and the touch is inside it, let the dialog handle the touch
-                try {
-                    val dialog = centerUnitDialog
-                    if (dialog != null && dialog.visibility == View.VISIBLE) {
-                        val loc2 = IntArray(2)
-                        dialog.getLocationOnScreen(loc2)
-                        val dx = loc2[0].toFloat()
-                        val dy = loc2[1].toFloat()
-                        val dw = dialog.width.toFloat()
-                        val dh = dialog.height.toFloat()
-                        if (rawX >= dx && rawX <= dx + dw && rawY >= dy && rawY <= dy + dh) {
-                            return@setOnTouchListener false
-                        }
-                    }
-                } catch (e: Throwable) {
-                    // ignore if dialog not attached yet
-                }
-
-                try {
-                    // Forward to native; onTouch returns true if a unit was selected
-                    val selected = onTouch(rawX, rawY)
-                    if (selected) {
-                        centerDialogShowRequested = true
-                    }
-                } catch (e: Throwable) {
-                    // ignore
-                }
-                // consume so children don't also get it
-                return@setOnTouchListener true
-            }
-            false
-        }
+        // Remove touch listener - let all touch events go to native GameActivity
+        // This allows TouchInputHandler to receive raw touch events for pinch processing
+        // UI button handling will be done through click listeners instead
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

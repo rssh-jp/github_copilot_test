@@ -37,11 +37,13 @@ set(USECASE_SOURCES
     # Usecases
     usecases/CombatUseCase.cpp
     usecases/MovementUseCase.cpp
+    usecases/CameraControlUseCase.cpp
 )
 
 set(FRAMEWORK_SOURCES
     frameworks/android/AndroidOut.cpp
     frameworks/android/UnitStatusJNI.cpp
+    frameworks/android/TouchInputHandler.cpp
     frameworks/graphics/Renderer.cpp
     frameworks/graphics/Shader.cpp
     frameworks/graphics/TextureAsset.cpp
