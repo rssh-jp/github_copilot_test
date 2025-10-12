@@ -71,6 +71,14 @@ public:
      * @return UnitRenderer* (借用ポインタ)
      */
     UnitRenderer* getUnitRenderer() const;
+    
+    /**
+     * ゲーム全体を初期状態にリセットします。
+     * - カメラ位置とズームを初期状態にリセット
+     * - 全ユニットの位置を初期位置にリセット
+     * - 全ユニットのHPを最大HPにリセット
+     */
+    void resetGameToInitialState();
 
 private:
     /**

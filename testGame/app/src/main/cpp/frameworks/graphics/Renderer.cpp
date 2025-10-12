@@ -964,6 +964,41 @@ UnitRenderer* Renderer::getUnitRenderer() const {
     return unitRenderer_.get();
 }
 
+void Renderer::resetGameToInitialState() {
+    aout << "RESET: Starting game reset to initial state..." << std::endl;
+    
+    // 1. カメラを初期状態にリセット
+    cameraOffsetX_ = 0.0f;
+    cameraOffsetY_ = 0.0f;
+    cameraZoom_ = 1.0f;
+    
+    // カメラ制御ユースケースでカメラをリセット
+    if (cameraControlUseCase_) {
+        cameraControlUseCase_->resetCamera();
+    }
+    
+    aout << "RESET: Camera reset to initial position (0, 0) with zoom 1.0" << std::endl;
+    
+    // 2. 全ユニットのHPと状態を初期状態にリセット
+    for (auto& unit : units_) {
+        if (unit) {
+            unit->resetToInitialState();
+            aout << "RESET: Unit " << unit->getName() << " reset to initial state (HP: " << unit->getStats().getCurrentHp() << ")" << std::endl;
+        }
+    }
+    
+    // 3. 全ユニットの位置を初期位置にリセット
+    if (unitRenderer_) {
+        unitRenderer_->resetAllUnitsToInitialPositions();
+        aout << "RESET: All unit positions reset to initial state" << std::endl;
+    }
+    
+    // 4. プロジェクション行列の再計算をトリガー
+    shaderNeedsNewProjectionMatrix_ = true;
+    
+    aout << "RESET: Game reset to initial state completed!" << std::endl;
+}
+
 /**
  * タッチイベントを処理します（TouchInputHandlerからのコールバック）。
  * タッチの種類に応じて適切なユースケースに振り分けます。

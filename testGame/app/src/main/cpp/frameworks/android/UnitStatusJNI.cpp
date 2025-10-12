@@ -438,13 +438,10 @@ Java_com_example_testgame_MainActivity_resetAllUnitsToInitialPositions(JNIEnv *e
         LOGE("resetAllUnitsToInitialPositions: renderer not available");
         return JNI_FALSE;
     }
-    auto unitRenderer = g_renderer->getUnitRenderer();
-    if (!unitRenderer) {
-        LOGE("resetAllUnitsToInitialPositions: unitRenderer not available");
-        return JNI_FALSE;
-    }
-    unitRenderer->resetAllUnitsToInitialPositions();
-    LOGI("resetAllUnitsToInitialPositions: reset units to initial positions");
+    
+    // 完全なゲームリセットを実行
+    g_renderer->resetGameToInitialState();
+    LOGI("resetAllUnitsToInitialPositions: reset game to initial state (camera, units HP & positions)");
     return JNI_TRUE;
 }
 

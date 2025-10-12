@@ -320,6 +320,31 @@ public:
         }
     }
     
+    /**
+     * @brief ユニットを完全に初期状態にリセット
+     * HPを最大HPに戻し、状態をIDLEにリセットします
+     */
+    void resetToInitialState() {
+        // HPを最大HPにリセット
+        int maxHp = stats_.getMaxHp();
+        stats_ = UnitStats(maxHp, maxHp, 
+            stats_.getMinAttackPower(),
+            stats_.getMaxAttackPower(),
+            stats_.getMoveSpeed(),
+            stats_.getAttackRange(),
+            stats_.getAttackSpeed(),
+            stats_.getCollisionRadius());
+        
+        // 状態をIDLEにリセット
+        state_ = UnitState::IDLE;
+        
+        // 移動目標を現在位置にリセット
+        targetPosition_ = position_;
+        
+        // 最後の攻撃時刻をリセット
+        lastAttackTime_ = -1000.0f;
+    }
+    
     // 等価性は ID で判定（エンティティの特性）
     bool operator==(const UnitEntity& other) const {
         return id_ == other.id_;
