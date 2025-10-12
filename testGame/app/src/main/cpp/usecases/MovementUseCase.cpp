@@ -175,6 +175,7 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float de
         return targetPos;
     }
 
+    // 地形ごとの移動速度補正を反映（森・山などは multiplier < 1.0）
     const float speedMultiplier = terrainSpeedMultiplier(currentPos);
     const float effectiveSpeed = unit.getStats().getMoveSpeed() * speedMultiplier;
     if (effectiveSpeed <= 0.0f) {
@@ -186,6 +187,7 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float de
         return currentPos;
     }
 
+    // travelDistance は今回のフレームで進める距離（地形倍率を反映済み）
     const float travelDistance = std::min(distance, maxDistance);
     if (travelDistance <= 0.0f) {
         return currentPos;
@@ -205,7 +207,18 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float de
                                                     unit.getStats().getCollisionRadius());
     }
 
-    return applyBounds(unit, candidate);
+    Position boundedCandidate = applyBounds(unit, candidate);
+
+    // 最終的にユニットへ適用する移動先をログ出力して検証できるようにする
+    aout << "MovementUseCase::calculateNextPosition unit=" << unit.getId()
+        << " currentPos=(" << currentPos.getX() << ", " << currentPos.getY() << ")"
+        << " targetPos=(" << targetPos.getX() << ", " << targetPos.getY() << ")"
+        << " effectiveSpeed=" << effectiveSpeed << " deltaTime=" << deltaTime
+    << " travelDistance=" << travelDistance
+        << " result=(" << boundedCandidate.getX() << ", " << boundedCandidate.getY() << ")"
+        << std::endl;
+
+    return boundedCandidate;
 }
 
 size_t MovementUseCase::getMovingUnitsCount() const {
@@ -296,6 +309,7 @@ float MovementUseCase::terrainSpeedMultiplier(const Position& position) const {
     if (!gameMap_) {
         return 1.0f;
     }
+    // GameMap 側は TerrainType の定義に基づき 0.0〜1.0 の係数を返す
     return std::max(0.0f, gameMap_->getMovementMultiplier(position));
 }
 

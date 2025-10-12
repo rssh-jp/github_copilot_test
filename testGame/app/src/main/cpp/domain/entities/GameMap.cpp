@@ -45,6 +45,7 @@ TerrainType GameMap::terrainAt(const Position& worldPos) const {
 }
 
 float GameMap::getMovementMultiplier(const Position& worldPos) const {
+    // TerrainType ごとに決まった移動倍率（草原=1.0f, 森=0.4f など）を返す
     TerrainType terrain = terrainAt(worldPos);
     return getTerrainProperties(terrain).movementSpeedMultiplier;
 }

@@ -17,9 +17,9 @@ enum class TerrainType {
 };
 
 struct TerrainProperties {
-    float movementSpeedMultiplier; // Scalar applied to unit base move speed
-    bool walkable;                 // False indicates the tile blocks movement entirely
-    float evasionBonus;            // Placeholder for combat bonuses (not yet consumed)
+    float movementSpeedMultiplier; // ユニットの基本移動速度に掛ける倍率
+    bool walkable;                 // false の場合、そのタイルは移動を完全に遮断する
+    float evasionBonus;            // 戦闘ボーナス用の仮プレースホルダー（未使用）
 };
 
 TerrainProperties getTerrainProperties(TerrainType type);
