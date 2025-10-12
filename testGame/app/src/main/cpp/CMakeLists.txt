@@ -31,6 +31,8 @@ set(DOMAIN_SOURCES
     # Domain Services
     domain/services/CombatDomainService.cpp
     domain/services/CollisionDomainService.cpp
+    domain/entities/GameMap.cpp
+    domain/value_objects/TerrainType.cpp
 )
 
 set(USECASE_SOURCES
@@ -48,6 +50,7 @@ set(FRAMEWORK_SOURCES
     frameworks/graphics/Shader.cpp
     frameworks/graphics/TextureAsset.cpp
     frameworks/graphics/UnitRenderer.cpp
+    frameworks/graphics/TileMapLoader.cpp
     frameworks/utils/Utility.cpp
 )
 

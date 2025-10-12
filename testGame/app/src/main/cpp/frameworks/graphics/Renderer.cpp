@@ -31,6 +31,9 @@
 #include "Model.h"
 #include "../android/TouchInputHandler.h"
 #include "../usecases/CameraControlUseCase.h"
+#include "TileMapLoader.h"
+#include "../../domain/entities/GameMap.h"
+#include "TileMapLoader.h"
 
 // JNI関数の前方宣言
 extern "C" void setRendererReference(Renderer* renderer);
@@ -524,26 +527,62 @@ void Renderer::createModels() {
      * |   \ |
      * 3 --- 2
      */
-    // 画面いっぱいに表示するための四角形
-    std::vector<Vertex> vertices = {
-            Vertex(Vector3{1, 1, 0}, Vector2{1, 0}),     // 右上
-            Vertex(Vector3{-1, 1, 0}, Vector2{0, 0}),    // 左上
-            Vertex(Vector3{-1, -1, 0}, Vector2{0, 1}),   // 左下
-            Vertex(Vector3{1, -1, 0}, Vector2{1, 1})     // 右下
-    };
-    std::vector<Index> indices = {
-            0, 1, 2, 0, 2, 3
-    };
+    models_.clear();
 
-    // 背景用に暗い青色のテクスチャを作成
-    auto bgTexture = TextureAsset::createSolidColorTexture(0.1f, 0.1f, 0.3f);
-    aout << "Created background texture with ID: " << bgTexture->getTextureID() << std::endl;
+    std::shared_ptr<TextureAsset> fallbackTexture = TextureAsset::createSolidColorTexture(0.1f, 0.1f, 0.3f);
+    std::shared_ptr<TextureAsset> mapTexture;
 
-    // 画面全体を覆う背景モデルを作成して追加
-    models_.emplace_back(vertices, indices, bgTexture);
-    
-    // ユニットレンダラーを初期化（背景テクスチャを再利用）
-    unitRenderer_ = std::make_unique<UnitRenderer>(bgTexture);
+    if (app_ && app_->activity && app_->activity->assetManager) {
+        constexpr float kTileSize = 1.0f;
+        auto mapResult = TileMapLoader::loadFromPng(app_->activity->assetManager, "maps/demo_map.png", kTileSize);
+        if (mapResult) {
+            gameMap_ = mapResult->map;
+            mapTexture = mapResult->texture;
+
+            std::vector<Vertex> mapVertices = {
+                Vertex(Vector3{gameMap_->getMaxX(), gameMap_->getMaxY(), 0.0f}, Vector2{1.0f, 1.0f}),
+                Vertex(Vector3{gameMap_->getMinX(), gameMap_->getMaxY(), 0.0f}, Vector2{0.0f, 1.0f}),
+                Vertex(Vector3{gameMap_->getMinX(), gameMap_->getMinY(), 0.0f}, Vector2{0.0f, 0.0f}),
+                Vertex(Vector3{gameMap_->getMaxX(), gameMap_->getMinY(), 0.0f}, Vector2{1.0f, 0.0f})
+            };
+            std::vector<Index> mapIndices = {0, 1, 2, 0, 2, 3};
+            models_.emplace_back(mapVertices, mapIndices, mapTexture);
+
+            movementField_ = std::make_unique<MovementField>(
+                gameMap_->getMinX(), gameMap_->getMinY(), gameMap_->getMaxX(), gameMap_->getMaxY());
+
+            const float centerX = (gameMap_->getMinX() + gameMap_->getMaxX()) * 0.5f;
+            const float centerY = (gameMap_->getMinY() + gameMap_->getMaxY()) * 0.5f;
+            cameraOffsetX_ = cameraTargetX_ = centerX;
+            cameraOffsetY_ = cameraTargetY_ = centerY;
+            shaderNeedsNewProjectionMatrix_ = true;
+
+            aout << "Renderer: map loaded with bounds X(" << gameMap_->getMinX() << ", "
+                 << gameMap_->getMaxX() << ") Y(" << gameMap_->getMinY() << ", "
+                 << gameMap_->getMaxY() << ")" << std::endl;
+        } else {
+            gameMap_.reset();
+            aout << "Renderer: failed to load maps/demo_map.png, falling back to solid background" << std::endl;
+        }
+    }
+
+    if (!movementField_) {
+        movementField_ = std::make_unique<MovementField>(-6.0f, -6.0f, 6.0f, 6.0f);
+    }
+
+    if (models_.empty()) {
+        std::vector<Vertex> fallbackVertices = {
+            Vertex(Vector3{1, 1, 0}, Vector2{1, 0}),
+            Vertex(Vector3{-1, 1, 0}, Vector2{0, 0}),
+            Vertex(Vector3{-1, -1, 0}, Vector2{0, 1}),
+            Vertex(Vector3{1, -1, 0}, Vector2{1, 1})
+        };
+        std::vector<Index> fallbackIndices = {0, 1, 2, 0, 2, 3};
+        models_.emplace_back(fallbackVertices, fallbackIndices, fallbackTexture);
+    }
+
+    // ユニットレンダラーを初期化（単色テクスチャ）
+    unitRenderer_ = std::make_unique<UnitRenderer>(TextureAsset::createSolidColorTexture(0.6f, 0.6f, 0.6f));
     // デバッグ用途: 当たり判定ワイヤーフレームを常に表示
     unitRenderer_->setShowCollisionWireframes(true);
     // デバッグ用途: 攻撃範囲も表示
@@ -666,8 +705,10 @@ void Renderer::createModels() {
     aout << "Created " << units_.size() << " units" << std::endl;
     aout << "Spawned 2 factions with 3 units each" << std::endl;
 
-    // MovementField を大幅に拡大（ワールド座標 -100..100 x -100..100）- 移動制限を実質的に無効化
-    movementField_ = std::make_unique<MovementField>(-100.0f, -100.0f, 100.0f, 100.0f);
+    if (!movementField_) {
+        // フォールバック: 広い移動フィールドを用意（マップが読み込めなかったケース）
+        movementField_ = std::make_unique<MovementField>(-100.0f, -100.0f, 100.0f, 100.0f);
+    }
 
     // NOTE: Per request, we remove all circular obstacles from the field (no addCircleObstacle calls)
     // この変更により、フィールド上の障害物は存在しません。
@@ -695,7 +736,7 @@ void Renderer::createModels() {
 
     // ユースケースを初期化（MovementField を注入）
     combatUseCase_ = std::make_unique<CombatUseCase>(units_);
-    movementUseCase_ = std::make_unique<MovementUseCase>(units_, movementField_.get());
+    movementUseCase_ = std::make_unique<MovementUseCase>(units_, movementField_.get(), gameMap_.get());
     
     // 戦闘イベントのコールバックを設定
     combatUseCase_->setCombatEventCallback([this](const UnitEntity& attacker, const UnitEntity& target, const CombatDomainService::CombatResult& result) {

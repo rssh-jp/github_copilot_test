@@ -4,6 +4,7 @@
 #include "../domain/entities/UnitEntity.h"
 #include "../domain/services/CollisionDomainService.h"
 #include "../domain/value_objects/Position.h"
+#include "../domain/entities/GameMap.h"
 #include <vector>
 #include <memory>
 #include <functional>
@@ -43,7 +44,8 @@ public:
      * @param units 管理するユニットのリスト
      */
     explicit MovementUseCase(std::vector<std::shared_ptr<UnitEntity>>& units,
-                             const class MovementField* movementField = nullptr);
+                             const class MovementField* movementField = nullptr,
+                             const class GameMap* gameMap = nullptr);
 
     /**
      * @brief 移動イベントコールバックを設定
@@ -95,6 +97,7 @@ public:
 private:
     std::vector<std::shared_ptr<UnitEntity>>& units_;
     const class MovementField* movementField_ = nullptr;
+    const class GameMap* gameMap_ = nullptr;
     MovementEventCallback movementEventCallback_;
     MovementFailedCallback movementFailedCallback_;
     
@@ -120,6 +123,12 @@ private:
      * @brief 指定ユニットの次フレームでの位置を計算
      */
     Position calculateNextPosition(const UnitEntity& unit, float deltaTime) const;
+
+    Position applyBounds(const UnitEntity& unit, const Position& desired) const;
+    float terrainSpeedMultiplier(const Position& position) const;
+    Position resolveTerrainConstraints(const UnitEntity& unit,
+                                       const Position& start,
+                                       const Position& desired) const;
 };
 
 #endif // SIMULATION_GAME_MOVEMENT_USECASE_H

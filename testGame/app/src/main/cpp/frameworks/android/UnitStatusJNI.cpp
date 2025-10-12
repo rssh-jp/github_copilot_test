@@ -3,9 +3,11 @@
 #include <android/log.h>
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 #include "graphics/Renderer.h"
 #include "graphics/UnitRenderer.h"
 #include "entities/UnitEntity.h"
+#include "entities/GameMap.h"
 
 /*
  * UnitStatusJNI.cpp
@@ -100,6 +102,24 @@ std::shared_ptr<UnitEntity> getPlayerUnit() {
     }
     
     return unitRenderer->getUnit(1); // プレイヤーユニットはID=1
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_example_testgame_MainActivity_getUnit1EffectiveMoveSpeed(JNIEnv *env, jobject /* this */) {
+    auto unit = getPlayerUnit();
+    if (!unit) {
+        return 0.0f;
+    }
+
+    float baseSpeed = unit->getStats().getMoveSpeed();
+    float multiplier = 1.0f;
+    if (g_renderer) {
+        auto map = g_renderer->getGameMap();
+        if (map) {
+            multiplier = std::max(0.0f, map->getMovementMultiplier(unit->getPosition()));
+        }
+    }
+    return baseSpeed * multiplier;
 }
 
 // Return currently selected unit if any

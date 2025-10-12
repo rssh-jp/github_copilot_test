@@ -15,7 +15,10 @@
 #include "../../domain/services/MovementField.h"
 #include "../android/TouchInputHandler.h"
 
+class GameMap;
+
 struct android_app;
+class GameMap;
 
 class Renderer {
 public:
@@ -175,6 +178,7 @@ private:
     std::unique_ptr<CameraControlUseCase> cameraControlUseCase_;
     // Movement field for walkability and obstacles
     std::unique_ptr<class MovementField> movementField_;
+    std::shared_ptr<GameMap> gameMap_;
     
     // 新しいタッチ入力システム
     std::unique_ptr<TouchInputHandler> touchInputHandler_;
@@ -211,6 +215,7 @@ public:
     float getCameraOffsetX() const { return cameraOffsetX_; }
     float getCameraOffsetY() const { return cameraOffsetY_; }
     float getElapsedTime() const { return elapsedTime_; }
+    std::shared_ptr<GameMap> getGameMap() const { return gameMap_; }
     // Public wrapper to convert screen coordinates (pixels) to world/game coordinates
     // Uses the existing private screenToWorldCoordinates implementation.
     void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const {

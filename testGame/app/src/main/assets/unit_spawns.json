@@ -1,11 +1,11 @@
 {
   "units": [
-    { "id": 1, "name": "Player1", "x": -2.0, "y": 1.5, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 1.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
-    { "id": 2, "name": "Player2", "x": -2.0, "y": 0.0, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 1.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
-    { "id": 3, "name": "Player3", "x": -2.0, "y": -1.5, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 1.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
+    { "id": 1, "name": "Player1", "x": -2.0, "y": 1.5, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 3.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
+    { "id": 2, "name": "Player2", "x": -2.0, "y": 0.0, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 3.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
+    { "id": 3, "name": "Player3", "x": -2.0, "y": -1.5, "faction": 1, "stats": { "maxHp": 120, "currentHp": 120, "minAttack": 6, "maxAttack": 10, "moveSpeed": 3.0, "attackSpeed": 0.6, "defense": 0.5, "collisionRadius": 0.25 } },
 
-    { "id": 4, "name": "Enemy1", "x": 2.0, "y": 1.5, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 1.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } },
-    { "id": 5, "name": "Enemy2", "x": 2.0, "y": 0.0, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 1.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } },
-    { "id": 6, "name": "Enemy3", "x": 2.0, "y": -1.5, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 1.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } }
+    { "id": 4, "name": "Enemy1", "x": 2.0, "y": 1.5, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 3.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } },
+    { "id": 5, "name": "Enemy2", "x": 2.0, "y": 0.0, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 3.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } },
+    { "id": 6, "name": "Enemy3", "x": 2.0, "y": -1.5, "faction": 2, "stats": { "maxHp": 100, "currentHp": 100, "minAttack": 4, "maxAttack": 8, "moveSpeed": 3.0, "attackSpeed": 0.7, "defense": 0.4, "collisionRadius": 0.25 } }
   ]
 }

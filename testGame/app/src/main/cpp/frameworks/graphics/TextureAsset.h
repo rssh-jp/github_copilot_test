@@ -29,6 +29,9 @@ public:
     static std::shared_ptr<TextureAsset>
     createSolidColorTexture(float r, float g, float b, float a = 1.0f);
 
+    static std::shared_ptr<TextureAsset>
+    createFromPixels(int width, int height, const std::vector<uint8_t>& rgbaData);
+
     ~TextureAsset();
 
     /*!

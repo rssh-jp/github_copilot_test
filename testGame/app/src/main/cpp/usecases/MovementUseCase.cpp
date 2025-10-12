@@ -5,8 +5,12 @@
 #include "../frameworks/android/AndroidOut.h"
 
 MovementUseCase::MovementUseCase(std::vector<std::shared_ptr<UnitEntity>>& units,
-    const MovementField* movementField)
-    : units_(units), movementField_(movementField), movementEnabled_(true) {
+    const MovementField* movementField,
+    const GameMap* gameMap)
+    : units_(units),
+      movementField_(movementField),
+      gameMap_(gameMap),
+      movementEnabled_(true) {
 }
 
 void MovementUseCase::setMovementEventCallback(MovementEventCallback callback) {
@@ -18,18 +22,6 @@ void MovementUseCase::setMovementFailedCallback(MovementFailedCallback callback)
 }
 
 bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
-    /**
-     * Move the specified unit towards targetPosition.
-     * Behavior:
-     * - Validates movement is enabled (new check for touch input control).
-     * - Validates unit existence and liveliness.
-     * - If a MovementField is configured, snaps the target inside the field and validates walkability.
-     * - Calculates an avoidance-aware actual target using CollisionDomainService and sets the unit's
-     *   targetPosition accordingly.
-     * - Emits movementEventCallback_ with the from/to positions when movement is started.
-     */
-    
-    // 移動が無効化されている場合は処理しない
     if (!movementEnabled_) {
         if (movementFailedCallback_) {
             auto unit = findUnitById(unitId);
@@ -39,174 +31,181 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position& targetPosition) {
         }
         return false;
     }
-    
+
     auto unit = findUnitById(unitId);
     if (!unit) {
-        return false; // ユニットが見つからない
+        return false;
     }
 
     if (unit->getStats().getCurrentHp() <= 0) {
         if (movementFailedCallback_) {
             movementFailedCallback_(*unit, targetPosition, "Unit is dead");
         }
-        return false; // 死亡ユニットは移動できない
+        return false;
     }
 
-    // 他のユニットのリストを取得
     auto otherUnits = getOtherUnits(*unit);
 
-    // MovementField がある場合はターゲットをフィールド内にスナップし、歩行可能か確認
-    // 移動制限を無効化（デバッグ用）
-    Position desiredTarget = targetPosition;
-    // 移動制限チェックをスキップしてユニット移動を自由にする
-    /*
-    if (movementField_) {
-        desiredTarget = movementField_->snapInside(desiredTarget);
-        if (!movementField_->isWalkable(desiredTarget, unit->getStats().getCollisionRadius())) {
+    Position boundedTarget = applyBounds(*unit, targetPosition);
+    Position terrainAwareTarget = boundedTarget;
+    if (gameMap_) {
+        terrainAwareTarget = gameMap_->resolveMovementTarget(unit->getPosition(), boundedTarget,
+                                                            unit->getStats().getCollisionRadius());
+        if (!gameMap_->isWalkable(terrainAwareTarget, unit->getStats().getCollisionRadius())) {
             if (movementFailedCallback_) {
-                movementFailedCallback_(*unit, targetPosition, "Target not walkable on field");
+                movementFailedCallback_(*unit, targetPosition, "Target blocked by terrain");
             }
             return false;
         }
     }
-    */
 
-    // 衝突回避を考慮した実際の移動先を計算
-    Position actualTarget = CollisionDomainService::calculateAvoidancePosition(
-        *unit, desiredTarget, otherUnits);
+    Position avoidanceTarget = CollisionDomainService::calculateAvoidancePosition(
+        *unit, terrainAwareTarget, otherUnits);
 
-    // 移動前の位置を記録
+    avoidanceTarget = applyBounds(*unit, avoidanceTarget);
+    if (gameMap_) {
+        avoidanceTarget = gameMap_->resolveMovementTarget(unit->getPosition(), avoidanceTarget,
+                                                         unit->getStats().getCollisionRadius());
+    }
+
     Position fromPosition = unit->getPosition();
+    const float travelDistance = fromPosition.distanceTo(avoidanceTarget);
+    if (travelDistance <= 1e-4f) {
+        if (movementFailedCallback_) {
+            movementFailedCallback_(*unit, targetPosition, "No viable path found");
+        }
+        return false;
+    }
 
-    // 移動を実行
-    unit->setTargetPosition(actualTarget);
+    unit->setTargetPosition(avoidanceTarget);
 
-    // イベント通知
     if (movementEventCallback_) {
-        movementEventCallback_(*unit, fromPosition, actualTarget);
+        movementEventCallback_(*unit, fromPosition, avoidanceTarget);
+    }
+
+    if (gameMap_ && targetPosition.distanceTo(avoidanceTarget) > 0.05f) {
+        aout << "MovementUseCase: adjusted target due to terrain from ("
+             << targetPosition.getX() << ", " << targetPosition.getY() << ") to ("
+             << avoidanceTarget.getX() << ", " << avoidanceTarget.getY() << ")" << std::endl;
     }
 
     return true;
 }
 
 void MovementUseCase::updateMovements(float deltaTime) {
-    /**
-     * Update movement for all units.
-     *
-     *  - 各ユニットについて次フレームでの位置を予測し、他ユニットとの接触を検出します。
-     *  - 接触が予測される場合はバックオフや停止処理を行い、衝突を回避します。
-     *  - 問題がなければ UnitEntity::updateMovement(deltaTime) を呼んで実際の移動を行います。
-     */
     for (auto& unit : units_) {
-        if (unit->getStats().getCurrentHp() <= 0) {
-            continue; // 死亡ユニットは移動しない
+        if (!unit || unit->getStats().getCurrentHp() <= 0) {
+            continue;
+        }
+        if (unit->getState() != UnitState::MOVING) {
+            continue;
         }
 
-        if (unit->getState() != UnitState::MOVING) continue;
+        unit->setTargetPosition(applyBounds(*unit, unit->getTargetPosition()));
 
-    // 予測される次の位置を計算
-    Position currentPos = unit->getPosition();
-    Position nextPos = calculateNextPosition(*unit, deltaTime);
+        Position currentPos = unit->getPosition();
+        Position nextPos = calculateNextPosition(*unit, deltaTime);
 
-        // 他ユニットを取得
         auto otherUnits = getOtherUnits(*unit);
-
-        // 衝突判定: currentPos -> nextPos の線分上で最初に接触する点を探す
         float movingRadius = unit->getStats().getCollisionRadius();
-        Position contactPos = currentPos; // out param 初期値
+        Position contactPos = currentPos;
         const UnitEntity* contactUnit = nullptr;
         bool hasContact = CollisionDomainService::findFirstContactOnPath(
             currentPos, nextPos, otherUnits, contactPos, contactUnit, unit.get(), movingRadius);
 
         if (hasContact) {
-            // 接触点が見つかった場合、接触点が現在位置に極めて近い（再検出でスタックする）
-            // か、現在位置が既にめり込んでいる場合は少し後退させる（バックオフ）
-            const float EPS_T = 1e-3f; // 接触点が現在位置に近いとみなす閾値（割合）
-            const float BACKOFF_DISTANCE = 0.02f; // バックオフ量（ワールド単位）
+            constexpr float kEpsT = 1e-3f;
+            constexpr float kBackoffDistance = 0.02f;
 
-            // 線分長と接触位置の t を計算
             float segmentLen = currentPos.distanceTo(nextPos);
             float t = 0.0f;
             if (segmentLen > 1e-6f) {
                 t = currentPos.distanceTo(contactPos) / segmentLen;
-            } else {
-                t = 0.0f;
             }
 
-            // currentPos が既に他ユニットと衝突しているかを確認
-            bool currentlyOverlapping = CollisionDomainService::hasCollisionAt(currentPos, otherUnits, unit.get(), movingRadius);
+            float dirX = 0.0f;
+            float dirY = 0.0f;
+            if (segmentLen > 1e-6f) {
+                dirX = (nextPos.getX() - currentPos.getX()) / segmentLen;
+                dirY = (nextPos.getY() - currentPos.getY()) / segmentLen;
+            }
+
+            bool currentlyOverlapping = CollisionDomainService::hasCollisionAt(
+                currentPos, otherUnits, unit.get(), movingRadius);
 
             if (currentlyOverlapping) {
-                // 既にめり込んでいる: 目標方向の逆方向に少し戻す
-                float dirX = 0.0f, dirY = 0.0f;
-                if (segmentLen > 1e-6f) {
-                    dirX = (nextPos.getX() - currentPos.getX()) / segmentLen;
-                    dirY = (nextPos.getY() - currentPos.getY()) / segmentLen;
-                }
-                // 逆方向へ少し移動
-                Position backPos = currentPos.moveBy(-dirX * BACKOFF_DISTANCE, -dirY * BACKOFF_DISTANCE);
-                // バックオフ後も衝突するなら calculateAvoidancePosition にフォールバック
+                Position backPos = currentPos.moveBy(-dirX * kBackoffDistance, -dirY * kBackoffDistance);
+                backPos = resolveTerrainConstraints(*unit, currentPos, backPos);
                 if (CollisionDomainService::hasCollisionAt(backPos, otherUnits, unit.get(), movingRadius)) {
                     Position safePos = CollisionDomainService::calculateAvoidancePosition(*unit, currentPos, otherUnits);
+                    safePos = resolveTerrainConstraints(*unit, currentPos, safePos);
                     unit->setTargetPosition(safePos);
                     unit->updatePosition(safePos);
                 } else {
                     unit->setTargetPosition(backPos);
                     unit->updatePosition(backPos);
                 }
-            } else if (t <= EPS_T) {
-                // 接触点が現在位置に非常に近い: 接触点の手前へ少しずらして停止させる
-                float dirX = 0.0f, dirY = 0.0f;
-                if (segmentLen > 1e-6f) {
-                    dirX = (nextPos.getX() - currentPos.getX()) / segmentLen;
-                    dirY = (nextPos.getY() - currentPos.getY()) / segmentLen;
-                }
-                Position stopBefore = contactPos.moveBy(-dirX * BACKOFF_DISTANCE, -dirY * BACKOFF_DISTANCE);
+            } else if (t <= kEpsT) {
+                Position stopBefore = contactPos.moveBy(-dirX * kBackoffDistance, -dirY * kBackoffDistance);
+                stopBefore = resolveTerrainConstraints(*unit, currentPos, stopBefore);
                 unit->setTargetPosition(stopBefore);
                 unit->updatePosition(stopBefore);
             } else {
-                // 通常: 接触点で停止
-                unit->setTargetPosition(contactPos);
-                unit->updatePosition(contactPos);
+                Position adjustedContact = resolveTerrainConstraints(*unit, currentPos, contactPos);
+                unit->setTargetPosition(adjustedContact);
+                unit->updatePosition(adjustedContact);
             }
         } else {
-            // 衝突なしなら通常の移動更新
-            unit->updateMovement(deltaTime);
+            unit->updatePosition(nextPos);
         }
     }
 }
 
 Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float deltaTime) const {
-    /**
-     * Calculate next position for the given unit assuming movement for deltaTime seconds.
-     * This is deterministic and side-effect free: it does not mutate the unit.
-     */
     Position currentPos = unit.getPosition();
-    Position targetPos = unit.getTargetPosition();
+    Position targetPos = applyBounds(unit, unit.getTargetPosition());
 
-    // 移動ベクトル計算
-    Position direction = targetPos - currentPos;
-    float distance = currentPos.distanceTo(targetPos);
-
-    if (distance <= 0.001f) {
-        return targetPos; // 既に到達
+    if (gameMap_) {
+        targetPos = gameMap_->resolveMovementTarget(currentPos, targetPos,
+                                                    unit.getStats().getCollisionRadius());
     }
 
-    // 最大移動距離
-    float maxDistance = unit.getStats().getMoveSpeed() * deltaTime;
-
-    if (distance <= maxDistance) {
-        return targetPos; // 一度に到達可能
+    const float distance = currentPos.distanceTo(targetPos);
+    if (distance <= 0.001f || deltaTime <= 0.0f) {
+        return targetPos;
     }
 
-    // 正規化して移動
-    float normalizedX = direction.getX() / distance;
-    float normalizedY = direction.getY() / distance;
+    const float speedMultiplier = terrainSpeedMultiplier(currentPos);
+    const float effectiveSpeed = unit.getStats().getMoveSpeed() * speedMultiplier;
+    if (effectiveSpeed <= 0.0f) {
+        return currentPos;
+    }
 
-    return currentPos.moveBy(
-        normalizedX * maxDistance,
-        normalizedY * maxDistance
-    );
+    const float maxDistance = std::max(0.0f, effectiveSpeed * deltaTime);
+    if (maxDistance <= 0.0f) {
+        return currentPos;
+    }
+
+    const float travelDistance = std::min(distance, maxDistance);
+    if (travelDistance <= 0.0f) {
+        return currentPos;
+    }
+
+    if (travelDistance >= distance - 1e-5f) {
+        return targetPos;
+    }
+
+    const float stepRatio = travelDistance / distance;
+    Position candidate(
+        currentPos.getX() + (targetPos.getX() - currentPos.getX()) * stepRatio,
+        currentPos.getY() + (targetPos.getY() - currentPos.getY()) * stepRatio);
+
+    if (gameMap_) {
+        candidate = gameMap_->resolveMovementTarget(currentPos, candidate,
+                                                    unit.getStats().getCollisionRadius());
+    }
+
+    return applyBounds(unit, candidate);
 }
 
 size_t MovementUseCase::getMovingUnitsCount() const {
@@ -226,20 +225,18 @@ bool MovementUseCase::canMoveToPosition(int unitId, const Position& targetPositi
         return false; // 死亡ユニットは移動できない
     }
 
-    // 他のユニットのリストを取得
     auto otherUnits = getOtherUnits(*unit);
 
-    // MovementField がある場合はフィールド上で歩行可能かチェック
-    // 移動制限チェックを無効化（デバッグ用）
-    /*
-    if (movementField_) {
-        Position snapped = movementField_->snapInside(targetPosition);
-        if (!movementField_->isWalkable(snapped, unit->getStats().getCollisionRadius())) return false;
+    Position boundedTarget = applyBounds(*unit, targetPosition);
+    if (gameMap_) {
+        boundedTarget = gameMap_->resolveMovementTarget(unit->getPosition(), boundedTarget,
+                                                        unit->getStats().getCollisionRadius());
+        if (!gameMap_->isWalkable(boundedTarget, unit->getStats().getCollisionRadius())) {
+            return false;
+        }
     }
-    */
 
-    // Delegate detailed collision/path checks to CollisionDomainService.
-    return CollisionDomainService::canMoveTo(*unit, targetPosition, otherUnits);
+    return CollisionDomainService::canMoveTo(*unit, boundedTarget, otherUnits);
 }
 
 std::shared_ptr<UnitEntity> MovementUseCase::findUnitById(int unitId) {
@@ -282,4 +279,32 @@ void MovementUseCase::setMovementEnabled(bool enabled, const std::string& reason
 
 bool MovementUseCase::isMovementEnabled() const {
     return movementEnabled_;
+}
+
+Position MovementUseCase::applyBounds(const UnitEntity& unit, const Position& desired) const {
+    Position bounded = desired;
+    if (movementField_) {
+        bounded = movementField_->snapInside(bounded);
+    }
+    if (gameMap_) {
+        bounded = gameMap_->clampInside(bounded, unit.getStats().getCollisionRadius());
+    }
+    return bounded;
+}
+
+float MovementUseCase::terrainSpeedMultiplier(const Position& position) const {
+    if (!gameMap_) {
+        return 1.0f;
+    }
+    return std::max(0.0f, gameMap_->getMovementMultiplier(position));
+}
+
+Position MovementUseCase::resolveTerrainConstraints(const UnitEntity& unit,
+                                                     const Position& start,
+                                                     const Position& desired) const {
+    Position bounded = applyBounds(unit, desired);
+    if (gameMap_) {
+        return gameMap_->resolveMovementTarget(start, bounded, unit.getStats().getCollisionRadius());
+    }
+    return bounded;
 }

@@ -116,6 +116,43 @@ std::shared_ptr<TextureAsset> TextureAsset::createSolidColorTexture(float r, flo
     return std::shared_ptr<TextureAsset>(new TextureAsset(textureId));
 }
 
+std::shared_ptr<TextureAsset> TextureAsset::createFromPixels(int width, int height, const std::vector<uint8_t>& rgbaData) {
+    if (width <= 0 || height <= 0) {
+        aout << "TextureAsset::createFromPixels: invalid dimensions " << width << "x" << height << std::endl;
+        return nullptr;
+    }
+
+    const size_t expectedSize = static_cast<size_t>(width) * height * 4;
+    if (rgbaData.size() < expectedSize) {
+        aout << "TextureAsset::createFromPixels: buffer too small (" << rgbaData.size()
+             << " < " << expectedSize << ")" << std::endl;
+        return nullptr;
+    }
+
+    GLuint textureId = 0;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGBA,
+                 width,
+                 height,
+                 0,
+                 GL_RGBA,
+                 GL_UNSIGNED_BYTE,
+                 rgbaData.data());
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    return std::shared_ptr<TextureAsset>(new TextureAsset(textureId));
+}
+
 TextureAsset::~TextureAsset() {
     // return texture resources
     glDeleteTextures(1, &textureID_);

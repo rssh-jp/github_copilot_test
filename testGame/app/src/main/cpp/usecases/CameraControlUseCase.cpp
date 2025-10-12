@@ -5,7 +5,7 @@
 CameraControlUseCase::CameraControlUseCase()
     : currentState_()
     , stateChangeCallback_(nullptr)
-    , minZoomLevel_(0.5f)    // 50%まで縮小可能
+    , minZoomLevel_(0.15f)   // 15%まで縮小可能（従来の約3倍ズームアウト）
     , maxZoomLevel_(3.0f)    // 300%まで拡大可能
     , minPanX_(-50.0f)       // デフォルトのパン制限
     , maxPanX_(50.0f)
@@ -106,7 +106,7 @@ void CameraControlUseCase::resetCamera() {
 }
 
 void CameraControlUseCase::setZoomLimits(float minZoom, float maxZoom) {
-    minZoomLevel_ = std::max(0.1f, minZoom);  // 最小値は0.1f
+    minZoomLevel_ = std::max(0.05f, minZoom);  // 最小値は0.05f
     maxZoomLevel_ = std::min(10.0f, maxZoom); // 最大値は10.0f
     
     // 現在のズームレベルも制限内に収める

@@ -20,6 +20,7 @@
 #include <string>
 #include <memory>
 #include <cmath>
+#include <algorithm>
 
 /**
  * @brief ユニットの状態を表すEnum
@@ -199,53 +200,49 @@ public:
      * @param deltaTime フレーム間の時間（秒）
      */
     void updateMovement(float deltaTime) {
+        updateMovementWithModifier(deltaTime, 1.0f);
+    }
+
+    void updateMovementWithModifier(float deltaTime, float speedModifier) {
         if (state_ == UnitState::DEAD) {
             return;
         }
-        
-        // 目標位置に向かって移動
+
+        const float clampedModifier = std::max(0.0f, speedModifier);
+        const float effectiveSpeed = stats_.getMoveSpeed() * clampedModifier;
+        if (effectiveSpeed <= 0.0f || deltaTime <= 0.0f) {
+            state_ = UnitState::IDLE;
+            return;
+        }
+
         float distance = position_.distanceTo(targetPosition_);
-    // Use a named constexpr for arrival threshold so behavior is easy to tune.
-    // This value represents world units within which the unit is considered to have arrived.
-    static constexpr float kArrivalThreshold = 0.05f; // 到着判定の閾値
-        
-    if (distance > kArrivalThreshold) {
-            // 移動方向を計算
-            float dx = targetPosition_.getX() - position_.getX();
-            float dy = targetPosition_.getY() - position_.getY();
-            
-            // 正規化
-            float moveX = (dx / distance) * stats_.getMoveSpeed() * deltaTime;
-            float moveY = (dy / distance) * stats_.getMoveSpeed() * deltaTime;
-            
-            // 移動量が残り距離を超える場合は目標位置に直接設定
-            float moveLen = std::sqrt(moveX * moveX + moveY * moveY);
-            if (moveLen >= distance) {
-                position_ = targetPosition_;
-                state_ = UnitState::IDLE;
-            } else {
-                // 次の位置を計算
-                Position nextPos(position_.getX() + moveX, position_.getY() + moveY);
+        static constexpr float kArrivalThreshold = 0.05f;
 
-                // 他ユニットとの衝突をチェック（線分上に衝突があるか）
-                // ここでは全ユニットリストはユースケース側が持っているため直接参照できない。
-                // 代替として、CollisionDomainServiceのhasCollisionOnPathを使うには全ユニットリストを渡す必要がある。
-                // 簡易的なアプローチとして、近傍の停止判定を行うために同じレンダラ/ユースケースから提供される
-                // findInRangeのようなAPIはないため、当面は単純に次位置が他ユニット中心と重なっていないかをチェックする。
-                // 実装の簡潔さ優先で、全ユニットリストを取得するAPIがない場合は停止判定を行わない。
-
-                // 新しい位置に他ユニットの中心との距離が (r_self + r_other) 未満であれば、
-                // 衝突直前の位置（相手中心への方向の合成半径分手前）で停止する。
-                // 注意: このコードはすべてのユニットリストがここで利用できる前提では動作しないため、
-                // MovementUseCase 側で正確な停止処理を行うのが望ましい。ここでは最低限のガードを追加しない。
-
-                position_ = nextPos;
-                state_ = UnitState::MOVING;
-            }
-        } else {
-            // 目標位置に到達
+        if (distance <= kArrivalThreshold) {
             position_ = targetPosition_;
             state_ = UnitState::IDLE;
+            return;
+        }
+
+        float dx = targetPosition_.getX() - position_.getX();
+        float dy = targetPosition_.getY() - position_.getY();
+        if (std::abs(dx) < 1e-6f && std::abs(dy) < 1e-6f) {
+            state_ = UnitState::IDLE;
+            return;
+        }
+
+        float moveDistance = effectiveSpeed * deltaTime;
+        float moveX = (dx / distance) * moveDistance;
+        float moveY = (dy / distance) * moveDistance;
+
+        float moveLen = std::sqrt(moveX * moveX + moveY * moveY);
+        if (moveLen >= distance) {
+            position_ = targetPosition_;
+            state_ = UnitState::IDLE;
+        } else {
+            Position nextPos(position_.getX() + moveX, position_.getY() + moveY);
+            position_ = nextPos;
+            state_ = UnitState::MOVING;
         }
     }
     

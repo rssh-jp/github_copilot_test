@@ -53,6 +53,7 @@ class MainActivity : GameActivity() {
     private external fun getCameraOffsetY(): Float
     private external fun getElapsedTime(): Float
     private external fun getFactionCountsPacked(): Int
+    private external fun getUnit1EffectiveMoveSpeed(): Float
     
     // JNI Native functions - ユニットコマンド用
     private external fun moveUnit()
@@ -102,11 +103,15 @@ class MainActivity : GameActivity() {
                     val camY = getCameraOffsetY()
                     val elapsed = getElapsedTime()
                     val packed = getFactionCountsPacked()
+                    val unit1Speed = getUnit1EffectiveMoveSpeed()
                     val f1 = packed and 0xFF
                     val f2 = (packed shr 8) and 0xFF
                     val f3 = (packed shr 16) and 0xFF
                     val f4 = (packed shr 24) and 0xFF
-                    val worldText = String.format("Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs", camX, camY, f1, f2, f3, f4, elapsed)
+                    val worldText = String.format(
+                        "Center: %.2f, %.2f\nF1: %d F2: %d F3: %d F4: %d\nTime: %.1fs\nUnit1 Speed: %.2f",
+                        camX, camY, f1, f2, f3, f4, elapsed, unit1Speed
+                    )
                     // 左上のステータスボードは常にワールド情報を表示
                     statusBoard.setText(worldText)
                     statusBoard.setButtonsVisible(false)
