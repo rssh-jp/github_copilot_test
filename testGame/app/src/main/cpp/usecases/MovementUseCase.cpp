@@ -106,6 +106,25 @@ void MovementUseCase::updateMovements(float deltaTime) {
         Position currentPos = unit->getPosition();
         Position nextPos = calculateNextPosition(*unit, deltaTime);
 
+        auto logFinalMovement = [&](const Position& destination, const char* reason) {
+            if (currentPos == destination) {
+                return;
+            }
+            const float baseSpeed = unit->getStats().getMoveSpeed();
+            const float multiplier = terrainSpeedMultiplier(currentPos);
+            const float effectiveSpeed = baseSpeed * multiplier;
+
+            aout << "MovementUseCase::updateMovements unit=" << unit->getId()
+                 << " reason=" << reason
+                 << " from=(" << currentPos.getX() << ", " << currentPos.getY() << ")"
+                 << " to=(" << destination.getX() << ", " << destination.getY() << ")"
+                 << " baseSpeed=" << baseSpeed
+                 << " terrainMultiplier=" << multiplier
+                 << " effectiveSpeed=" << effectiveSpeed
+                 << " deltaTime=" << deltaTime
+                 << std::endl;
+        };
+
         auto otherUnits = getOtherUnits(*unit);
         float movingRadius = unit->getStats().getCollisionRadius();
         Position contactPos = currentPos;
@@ -141,22 +160,27 @@ void MovementUseCase::updateMovements(float deltaTime) {
                     safePos = resolveTerrainConstraints(*unit, currentPos, safePos);
                     unit->setTargetPosition(safePos);
                     unit->updatePosition(safePos);
+                    logFinalMovement(safePos, "avoidance");
                 } else {
                     unit->setTargetPosition(backPos);
                     unit->updatePosition(backPos);
+                    logFinalMovement(backPos, "backoff");
                 }
             } else if (t <= kEpsT) {
                 Position stopBefore = contactPos.moveBy(-dirX * kBackoffDistance, -dirY * kBackoffDistance);
                 stopBefore = resolveTerrainConstraints(*unit, currentPos, stopBefore);
                 unit->setTargetPosition(stopBefore);
                 unit->updatePosition(stopBefore);
+                logFinalMovement(stopBefore, "collision-stop");
             } else {
                 Position adjustedContact = resolveTerrainConstraints(*unit, currentPos, contactPos);
                 unit->setTargetPosition(adjustedContact);
                 unit->updatePosition(adjustedContact);
+                logFinalMovement(adjustedContact, "collision-adjusted");
             }
         } else {
             unit->updatePosition(nextPos);
+            logFinalMovement(nextPos, "direct-move");
         }
     }
 }
@@ -207,18 +231,7 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity& unit, float de
                                                     unit.getStats().getCollisionRadius());
     }
 
-    Position boundedCandidate = applyBounds(unit, candidate);
-
-    // 最終的にユニットへ適用する移動先をログ出力して検証できるようにする
-    aout << "MovementUseCase::calculateNextPosition unit=" << unit.getId()
-        << " currentPos=(" << currentPos.getX() << ", " << currentPos.getY() << ")"
-        << " targetPos=(" << targetPos.getX() << ", " << targetPos.getY() << ")"
-        << " effectiveSpeed=" << effectiveSpeed << " deltaTime=" << deltaTime
-    << " travelDistance=" << travelDistance
-        << " result=(" << boundedCandidate.getX() << ", " << boundedCandidate.getY() << ")"
-        << std::endl;
-
-    return boundedCandidate;
+    return applyBounds(unit, candidate);
 }
 
 size_t MovementUseCase::getMovingUnitsCount() const {
