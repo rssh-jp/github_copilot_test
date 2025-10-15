@@ -49,6 +49,7 @@ set(FRAMEWORK_SOURCES
     frameworks/graphics/Renderer.cpp
     frameworks/graphics/Shader.cpp
     frameworks/graphics/TextureAsset.cpp
+    frameworks/graphics/TextRenderer.cpp
     frameworks/graphics/UnitRenderer.cpp
     frameworks/graphics/TileMapLoader.cpp
     frameworks/utils/Utility.cpp

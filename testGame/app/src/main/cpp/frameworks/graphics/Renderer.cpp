@@ -313,7 +313,7 @@ void Renderer::render() {
   // ユニットを描画（更新処理は描画前に完了済み）
   if (unitRenderer_) {
     aout << "Drawing units..." << std::endl;
-    unitRenderer_->render(shader_.get());
+    unitRenderer_->render(shader_.get(), cameraZoom_);
   } else {
     aout << "unitRenderer_ is null!" << std::endl;
   }

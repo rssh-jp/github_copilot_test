@@ -3,6 +3,7 @@
 
 #include "Model.h"
 #include "Shader.h"
+#include "TextRenderer.h"
 #include "entities/UnitEntity.h"
 #include <memory>
 #include <unordered_map>
@@ -62,19 +63,21 @@ public:
    * @brief ユニットを描画する
    *
    * @param shader 描画に使用するシェーダー
+   * @param cameraZoom カメラのズームレベル（HP表示のサイズ補正用）
    */
   // Render units using the provided shader. Provide camera offsets so unit
   // renderer can correctly place units in the world relative to the camera.
-  void render(const Shader *shader);
+  void render(const Shader *shader, float cameraZoom = 1.0f);
 
   /**
    * @brief 特定のユニットのHPバーを描画する
    *
    * @param shader 描画に使用するシェーダー
    * @param unit HPバーを描画するユニット
+   * @param cameraZoom カメラのズームレベル（HP数値表示のサイズ補正用）
    */
   void renderHPBar(const Shader *shader,
-                   const std::shared_ptr<UnitEntity> &unit);
+                   const std::shared_ptr<UnitEntity> &unit, float cameraZoom);
 
   /**
    * @brief すべてのユニットの状態を更新する
@@ -160,6 +163,9 @@ private:
 
   // ユニットのモデル
   Model unitModel_;
+
+  // テキストレンダラー（HP数値表示用）
+  std::unique_ptr<TextRenderer> textRenderer_;
 
   // 当たり判定ワイヤーフレームの表示フラグ
   bool showCollisionWireframes_ = false;

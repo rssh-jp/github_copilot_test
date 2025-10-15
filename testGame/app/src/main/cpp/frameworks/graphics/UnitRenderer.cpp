@@ -26,7 +26,8 @@
  * @param spTexture ユニット描画に使うデフォルトテクスチャ（nullptr でも可）
  */
 UnitRenderer::UnitRenderer(std::shared_ptr<TextureAsset> spTexture)
-    : spTexture_(spTexture), unitModel_(createUnitModel()) {
+    : spTexture_(spTexture), unitModel_(createUnitModel()),
+      textRenderer_(std::make_unique<TextRenderer>()) {
 
   aout << "UnitRenderer initialized with "
        << (spTexture ? "provided texture" : "default red texture") << std::endl;
@@ -116,7 +117,7 @@ std::shared_ptr<TextureAsset> UnitRenderer::getColorTexture(float r, float g,
  * 各ユニットの状態に応じてテクスチャや色を変え、モデル描画とHPバー描画を行います。
  * 描画順序: ユニット本体 -> HPバー -> (最後に) ワイヤーフレーム / 攻撃範囲
  */
-void UnitRenderer::render(const Shader *shader) {
+void UnitRenderer::render(const Shader *shader, float cameraZoom) {
   for (const auto &pair : units_) {
     const auto &unitId = pair.first;
     const auto &unit = pair.second;
@@ -209,7 +210,7 @@ void UnitRenderer::render(const Shader *shader) {
 
     // HP表示を描画（生きているユニットのみ）
     if (unit->isAlive()) {
-      renderHPBar(shader, unit);
+      renderHPBar(shader, unit, cameraZoom);
     }
   }
 
@@ -458,14 +459,19 @@ void UnitRenderer::updateUnits(float deltaTime) {
  * @brief 指定ユニットのHPバーを描画します。
  *
  * バーはユニットの上に固定され、HP割合に応じて色と幅が変化します。
+ * HP数値も同時に表示します。
  */
 void UnitRenderer::renderHPBar(const Shader *shader,
-                               const std::shared_ptr<UnitEntity> &unit) {
+                               const std::shared_ptr<UnitEntity> &unit,
+                               float cameraZoom) {
   // HP表示用のバーを描画する
   // バーの設定
   const float barWidth = 0.3f;   // バーの幅
   const float barHeight = 0.05f; // バーの高さ
   const float barY = 0.25f;      // ユニットの上端からの距離
+
+  // ユニットの位置を取得（HP数値表示でも使用するため先に取得）
+  auto position = unit->getPosition();
 
   // HPの割合を計算
   float hpRatio = static_cast<float>(unit->getStats().getCurrentHp()) /
@@ -499,7 +505,6 @@ void UnitRenderer::renderHPBar(const Shader *shader,
     modelMatrix[15] = 1.0f;
 
     // ユニットの実際の位置を設定
-    auto position = unit->getPosition();
     modelMatrix[12] = position.getX(); // X座標
     modelMatrix[13] = position.getY(); // Y座標
 
@@ -546,7 +551,6 @@ void UnitRenderer::renderHPBar(const Shader *shader,
     modelMatrix[15] = 1.0f;
 
     // ユニットの実際の位置を設定
-    auto position = unit->getPosition();
     modelMatrix[12] = position.getX(); // X座標
     modelMatrix[13] = position.getY(); // Y座標
 
@@ -557,8 +561,16 @@ void UnitRenderer::renderHPBar(const Shader *shader,
     shader->drawModel(hpBarModel);
   }
 
-  // HPの数値を表示するには、テキストレンダリングが必要ですが、
-  // この実装ではHP表示はバーのみにしています。
+  // HP数値をバーの上に表示
+  if (textRenderer_) {
+    // バーの上部にテキストを配置（バーの高さ分 + 少し余白）
+    float textY = barY + barHeight + 0.02f;
+    
+    // HP数値を白色で描画（ワールド座標で指定）
+    textRenderer_->renderHP(shader, unit->getStats().getCurrentHp(),
+                           unit->getStats().getMaxHp(), position.getX(),
+                           position.getY() + textY, 1.0f, cameraZoom, 1.0f, 1.0f, 1.0f);
+  }
 }
 
 /**

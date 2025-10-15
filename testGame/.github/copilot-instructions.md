@@ -36,6 +36,7 @@
 ```powershell
 ./gradlew.bat assembleDebug
 ```
+- コードの修正を行ったら毎回ビルドしてください。
 
 スクリプト、linuxコマンドの実行
 - wslコマンドで実行すること：wsl
