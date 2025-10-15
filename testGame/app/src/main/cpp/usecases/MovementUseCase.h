@@ -122,10 +122,14 @@ private:
   Position calculateNextPosition(const UnitEntity &unit, float deltaTime) const;
 
   Position applyBounds(const UnitEntity &unit, const Position &desired) const;
-  float terrainSpeedMultiplier(const Position &position) const;
+  float terrainSpeedMultiplier(const UnitEntity &unit,
+                               const Position &position) const;
   Position resolveTerrainConstraints(const UnitEntity &unit,
                                      const Position &start,
                                      const Position &desired) const;
+    Position clipMovementToTerrain(const UnitEntity &unit,
+                                   const Position &start,
+                                   const Position &desired) const;
 };
 
 #endif // SIMULATION_GAME_MOVEMENT_USECASE_H

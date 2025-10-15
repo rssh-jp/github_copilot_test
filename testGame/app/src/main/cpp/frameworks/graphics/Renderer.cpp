@@ -125,6 +125,109 @@ Renderer::~Renderer() {
   }
 }
 
+float Renderer::calculateDeltaTime() {
+  // フレーム間隔を測定し、極端な大きさを避ける
+  static auto lastTime = std::chrono::high_resolution_clock::now();
+  const auto currentTime = std::chrono::high_resolution_clock::now();
+  const float rawDelta =
+      std::chrono::duration<float>(currentTime - lastTime).count();
+  lastTime = currentTime;
+  return std::min(rawDelta, 0.016f);
+}
+
+void Renderer::updateGameState(float deltaTime) {
+  if (movementUseCase_) {
+    movementUseCase_->updateMovements(deltaTime);
+  }
+
+  if (combatUseCase_) {
+    combatUseCase_->executeAutoCombat();
+    combatUseCase_->removeDeadUnits();
+  }
+
+  resolveCombatEngagements();
+
+  if (unitRenderer_) {
+    unitRenderer_->updateUnits(deltaTime);
+  }
+
+  updateCameraSmoothing(deltaTime);
+
+  elapsedTime_ += deltaTime;
+}
+
+void Renderer::updateCameraSmoothing(float deltaTime) {
+  // カメラターゲットへ滑らかに追従する
+  const float toX = cameraTargetX_ - cameraOffsetX_;
+  const float toY = cameraTargetY_ - cameraOffsetY_;
+  const float maxStep = cameraSpeed_ * deltaTime;
+  const float dist = std::sqrt(toX * toX + toY * toY);
+
+  if (cameraTargetX_ == 0.0f && cameraTargetY_ == 0.0f &&
+      (cameraOffsetX_ != 0.0f || cameraOffsetY_ != 0.0f)) {
+    aout << "WARNING: Camera target unexpectedly reset to (0,0)! Current "
+         "offset: (" << cameraOffsetX_ << ", " << cameraOffsetY_ << ")"
+         << std::endl;
+  }
+
+  if (dist <= maxStep || dist == 0.0f) {
+    cameraOffsetX_ = cameraTargetX_;
+    cameraOffsetY_ = cameraTargetY_;
+  } else if (dist > 0.0f) {
+    cameraOffsetX_ += toX / dist * maxStep;
+    cameraOffsetY_ += toY / dist * maxStep;
+  }
+}
+
+void Renderer::resolveCombatEngagements() {
+  // 全ユニット間の距離を測り、射程内であれば戦闘状態に遷移させる
+  if (units_.size() < 2) {
+    return;
+  }
+
+  for (size_t i = 0; i < units_.size(); ++i) {
+    for (size_t j = i + 1; j < units_.size(); ++j) {
+      auto &unit1 = units_[i];
+      auto &unit2 = units_[j];
+
+      if (!unit1->isAlive() || !unit2->isAlive()) {
+        continue;
+      }
+
+      const auto pos1 = unit1->getPosition();
+      const auto pos2 = unit2->getPosition();
+      const float dx = pos2.getX() - pos1.getX();
+      const float dy = pos2.getY() - pos1.getY();
+      const float distance = std::sqrt(dx * dx + dy * dy);
+
+      const bool unit1InRange =
+          distance <= (unit1->getStats().getAttackRange() +
+                       unit2->getStats().getCollisionRadius());
+      const bool unit2InRange =
+          distance <= (unit2->getStats().getAttackRange() +
+                       unit1->getStats().getCollisionRadius());
+
+      if (!unit1InRange && !unit2InRange) {
+        continue;
+      }
+
+      if (unit1InRange && (unit1->getState() == UnitState::IDLE ||
+                           unit1->getState() == UnitState::COMBAT)) {
+        unit1->setState(UnitState::COMBAT);
+        aout << unit1->getName() << " entering combat with "
+             << unit2->getName() << std::endl;
+      }
+
+      if (unit2InRange && (unit2->getState() == UnitState::IDLE ||
+                           unit2->getState() == UnitState::COMBAT)) {
+        unit2->setState(UnitState::COMBAT);
+        aout << unit2->getName() << " entering combat with "
+             << unit1->getName() << std::endl;
+      }
+    }
+  }
+}
+
 /**
  * 描画ループの1フレーム分を実行します。
  *
@@ -134,24 +237,9 @@ Renderer::~Renderer() {
  * の増分、ユニットの状態遷移を行います。
  */
 void Renderer::render() {
-  // フレーム時間の計算（簡易的な実装）
-  static auto lastTime = std::chrono::high_resolution_clock::now();
-  auto currentTime = std::chrono::high_resolution_clock::now();
-  auto deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
-  lastTime = currentTime;
+  const float deltaTime = calculateDeltaTime();
 
-  // デルタタイムの上限を設定（フレームレート低下時の不具合を防ぐ）
-  deltaTime = std::min(deltaTime, 0.016f); // 最大60FPS相当
-
-  // ゲームロジックの更新
-  if (movementUseCase_) {
-    movementUseCase_->updateMovements(deltaTime);
-  }
-
-  if (combatUseCase_) {
-    combatUseCase_->executeAutoCombat();
-    combatUseCase_->removeDeadUnits();
-  }
+  updateGameState(deltaTime);
 
   // Check to see if the surface has changed size. This is _necessary_ to do
   // every frame when using immersive mode as you'll get no other notification
@@ -182,9 +270,6 @@ void Renderer::render() {
     shaderNeedsNewProjectionMatrix_ = false;
   }
 
-  // 経過時間を蓄積
-  elapsedTime_ += deltaTime;
-
   // すでに設定した色で背景をクリア（initRendererで設定した色）
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -194,30 +279,6 @@ void Renderer::render() {
 
   // シェーダーがアクティブか確認
   shader_->activate();
-
-  // Smoothly move cameraOffset towards cameraTarget each frame
-  // deltaTime was computed above; we clamp it earlier
-  // Interpolation: move by at most cameraSpeed_ * deltaTime toward target
-  float toX = cameraTargetX_ - cameraOffsetX_;
-  float toY = cameraTargetY_ - cameraOffsetY_;
-  float maxStep = cameraSpeed_ * deltaTime;
-  float dist = std::sqrt(toX * toX + toY * toY);
-
-  // カメラターゲットが(0,0)に意図せずリセットされていないかチェック
-  if (cameraTargetX_ == 0.0f && cameraTargetY_ == 0.0f &&
-      (cameraOffsetX_ != 0.0f || cameraOffsetY_ != 0.0f)) {
-    aout << "WARNING: Camera target unexpectedly reset to (0,0)! Current "
-            "offset: ("
-         << cameraOffsetX_ << ", " << cameraOffsetY_ << ")" << std::endl;
-  }
-
-  if (dist <= maxStep || dist == 0.0f) {
-    cameraOffsetX_ = cameraTargetX_;
-    cameraOffsetY_ = cameraTargetY_;
-  } else {
-    cameraOffsetX_ += toX / dist * maxStep;
-    cameraOffsetY_ += toY / dist * maxStep;
-  }
 
   // ビュー行列を使用してカメラオフセットを適用
   float viewMatrix[16];
@@ -249,72 +310,9 @@ void Renderer::render() {
     aout << "No background models to draw!" << std::endl;
   }
 
-  // ユニットを描画（更新はスキップしてデバッグ）
+  // ユニットを描画（更新処理は描画前に完了済み）
   if (unitRenderer_) {
     aout << "Drawing units..." << std::endl;
-
-    // 射程ベースの戦闘システム - 全ユニットペアをチェック
-    for (size_t i = 0; i < units_.size(); ++i) {
-      for (size_t j = i + 1; j < units_.size(); ++j) {
-        auto &unit1 = units_[i];
-        auto &unit2 = units_[j];
-
-        // 両方のユニットが生きている場合のみチェック
-        if (unit1->isAlive() && unit2->isAlive()) {
-          // ユニット間の距離を計算
-          auto pos1 = unit1->getPosition();
-          auto pos2 = unit2->getPosition();
-          float dx = pos2.getX() - pos1.getX();
-          float dy = pos2.getY() - pos1.getY();
-          float distance = std::sqrt(dx * dx + dy * dy);
-
-          // 射程内チェック（どちらかのユニットの射程内に入っている場合）
-          // Consider attack range plus the other's collision radius so attacker
-          // can reach
-          bool unit1InRange =
-              distance <= (unit1->getStats().getAttackRange() +
-                           unit2->getStats().getCollisionRadius());
-          bool unit2InRange =
-              distance <= (unit2->getStats().getAttackRange() +
-                           unit1->getStats().getCollisionRadius());
-
-          // いずれかが射程内で、適切な状態の場合は戦闘開始
-          if ((unit1InRange || unit2InRange)) {
-            // ユニット1が射程内にいて、待機状態なら戦闘状態に移行
-            // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
-            // Only enter combat if the unit has finished moving (is IDLE) or is
-            // already in COMBAT
-            if (unit1InRange && (unit1->getState() == UnitState::IDLE ||
-                                 unit1->getState() == UnitState::COMBAT)) {
-              // TODO: UnitEntityには setCombatTarget
-              // メソッドがないため一時的にコメントアウト
-              // unit1->setCombatTarget(unit2);
-              unit1->setState(UnitState::COMBAT);
-              aout << unit1->getName() << " entering combat with "
-                   << unit2->getName() << std::endl;
-            }
-
-            // ユニット2が射程内にいて、待機状態なら戦闘状態に移行
-            // 移動状態のユニットは移動を優先し、戦闘状態に移行しない
-            if (unit2InRange && (unit2->getState() == UnitState::IDLE ||
-                                 unit2->getState() == UnitState::COMBAT)) {
-              // TODO: UnitEntityには setCombatTarget
-              // メソッドがないため一時的にコメントアウト
-              // unit2->setCombatTarget(unit1);
-              unit2->setState(UnitState::COMBAT);
-              aout << unit2->getName() << " entering combat with "
-                   << unit1->getName() << std::endl;
-            }
-          }
-        }
-      }
-    }
-
-    // 各ユニットを更新
-    float deltaTime = 0.016f; // 仮の値: 60FPS想定で約16ms
-    unitRenderer_->updateUnits(deltaTime);
-
-    // すべてのユニットを描画（ビュー行列でカメラ変換が適用される）
     unitRenderer_->render(shader_.get());
   } else {
     aout << "unitRenderer_ is null!" << std::endl;

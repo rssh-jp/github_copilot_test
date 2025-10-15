@@ -29,15 +29,33 @@ public:
   TerrainType getTile(int x, int y) const;
 
   TerrainType terrainAt(const Position &worldPos) const;
-  float getMovementMultiplier(const Position &worldPos) const;
+  float getMovementMultiplier(const Position &worldPos,
+                              float radius = 0.0f) const;
   bool isWalkable(const Position &worldPos, float radius = 0.0f) const;
   Position clampInside(const Position &worldPos, float radius = 0.0f) const;
   Position resolveMovementTarget(const Position &start, const Position &desired,
                                  float radius) const;
 
+  struct MovementRaycastResult {
+    Position position;
+    bool hitBlocking;
+  };
+
+  MovementRaycastResult clipMovementRaycast(const Position &start,
+                                            const Position &desired,
+                                            float radius) const;
+
 private:
   bool positionToTile(const Position &worldPos, int &tileX, int &tileY) const;
   int toIndex(int x, int y) const;
+  bool computeTileRangeForCircle(const Position &center, float radius,
+                                 int &minTileX, int &maxTileX, int &minTileY,
+                                 int &maxTileY) const;
+  bool circleIntersectsTile(int tileX, int tileY, const Position &center,
+                            float radius) const;
+  Position findContactAlongPath(const Position &walkablePoint,
+                                const Position &blockedPoint,
+                                float radius) const;
 
   int width_;
   int height_;

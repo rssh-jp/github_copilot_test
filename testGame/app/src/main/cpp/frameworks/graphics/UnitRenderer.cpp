@@ -446,14 +446,12 @@ void UnitRenderer::updateUnits(float deltaTime) {
   }
 
   // 衝突予測機能付きでユニットを更新
-  for (auto &pair : units_) {
-    // 基本的な移動更新処理を実行
-    pair.second->updateMovement(deltaTime);
-
-    // TODO:
-    // より複雑な更新処理（攻撃、衝突回避等）は将来的にUseCaseレイヤーで実装予定
-    // pair.second->update(deltaTime, allUnits);
-  }
+  // 注意: 移動更新は MovementUseCase で地形倍率を考慮して行われるため、
+  // ここでは unit->updateMovement(deltaTime) を呼ばない
+  // （呼ぶと地形無視で上書きされてしまう）
+  
+  // TODO: 将来的に攻撃などの更新処理をここで実装する場合は
+  // 移動処理を含まない update メソッドを呼ぶこと
 }
 
 /**

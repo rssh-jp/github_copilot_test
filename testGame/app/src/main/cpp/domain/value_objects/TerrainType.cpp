@@ -5,10 +5,10 @@
 namespace {
 // movementSpeedMultiplier / walkable / evasionBonus
 constexpr TerrainProperties kGrassland{1.0f, true, 0.0f};
-constexpr TerrainProperties kForest{0.01f, true, 0.15f};
-constexpr TerrainProperties kMountain{0.005f, true, 0.25f};
+constexpr TerrainProperties kForest{0.5f, true, 0.15f};
+constexpr TerrainProperties kMountain{0.3f, true, 0.25f};
 constexpr TerrainProperties kWater{0.0f, false, 0.0f};
-constexpr TerrainProperties kRiver{0.0001f, true, 0.05f};
+constexpr TerrainProperties kRiver{0.01f, true, 0.05f};
 constexpr TerrainProperties kUnknown{1.0f, true, 0.0f};
 } // namespace
 

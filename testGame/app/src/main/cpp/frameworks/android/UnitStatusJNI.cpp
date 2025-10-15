@@ -135,8 +135,9 @@ Java_com_example_testgame_MainActivity_getUnit1EffectiveMoveSpeed(
   if (g_renderer) {
     auto map = g_renderer->getGameMap();
     if (map) {
-      multiplier =
-          std::max(0.0f, map->getMovementMultiplier(unit->getPosition()));
+    multiplier = std::max(0.0f, map->getMovementMultiplier(
+                   unit->getPosition(),
+                   unit->getStats().getCollisionRadius()));
     }
   }
   return baseSpeed * multiplier;

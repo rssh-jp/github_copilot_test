@@ -166,6 +166,15 @@ public:
   void updateCameraFromState(const CameraState &newState);
 
 private:
+  // フレーム間の経過時間を算出し、極端な値を抑制する
+  float calculateDeltaTime();
+  // 描画前にユニットやカメラなどゲーム状態を更新する
+  void updateGameState(float deltaTime);
+  // カメラのスムージング処理をまとめる
+  void updateCameraSmoothing(float deltaTime);
+  // ユニット同士の射程チェックを行い、戦闘状態を遷移させる
+  void resolveCombatEngagements();
+
   android_app *app_;
   EGLDisplay display_;
   EGLSurface surface_;

@@ -47,12 +47,24 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position &targetPosition) {
 
   Position boundedTarget = applyBounds(*unit, targetPosition);
   Position terrainAwareTarget = boundedTarget;
+  
+  // レイキャストで途中の停止タイルをチェック
   if (gameMap_) {
-    terrainAwareTarget =
-        gameMap_->resolveMovementTarget(unit->getPosition(), boundedTarget,
-                                        unit->getStats().getCollisionRadius());
-    if (!gameMap_->isWalkable(terrainAwareTarget,
-                              unit->getStats().getCollisionRadius())) {
+    const float radius = unit->getStats().getCollisionRadius();
+    auto rayResult = gameMap_->clipMovementRaycast(unit->getPosition(),
+                                                   boundedTarget, radius);
+    terrainAwareTarget = rayResult.position;
+    
+    if (rayResult.hitBlocking) {
+      // 停止タイルに遮られた場合、到達可能な位置を最終目標とする
+      if (movementFailedCallback_) {
+        movementFailedCallback_(*unit, targetPosition,
+                                "Path blocked by terrain");
+      }
+      // 遮られてもその手前までは移動可能なので続行
+    }
+    
+    if (!gameMap_->isWalkable(terrainAwareTarget, radius)) {
       if (movementFailedCallback_) {
         movementFailedCallback_(*unit, targetPosition,
                                 "Target blocked by terrain");
@@ -66,9 +78,10 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position &targetPosition) {
 
   avoidanceTarget = applyBounds(*unit, avoidanceTarget);
   if (gameMap_) {
-    avoidanceTarget =
-        gameMap_->resolveMovementTarget(unit->getPosition(), avoidanceTarget,
-                                        unit->getStats().getCollisionRadius());
+    const float radius = unit->getStats().getCollisionRadius();
+    auto rayResult = gameMap_->clipMovementRaycast(unit->getPosition(),
+                                                   avoidanceTarget, radius);
+    avoidanceTarget = rayResult.position;
   }
 
   Position fromPosition = unit->getPosition();
@@ -116,7 +129,8 @@ void MovementUseCase::updateMovements(float deltaTime) {
         return;
       }
       const float baseSpeed = unit->getStats().getMoveSpeed();
-      const float multiplier = terrainSpeedMultiplier(currentPos);
+    const float multiplier =
+      terrainSpeedMultiplier(*unit, currentPos);
       const float effectiveSpeed = baseSpeed * multiplier;
 
       aout << "MovementUseCase::updateMovements unit=" << unit->getId()
@@ -188,8 +202,19 @@ void MovementUseCase::updateMovements(float deltaTime) {
         logFinalMovement(adjustedContact, "collision-adjusted");
       }
     } else {
-      unit->updatePosition(nextPos);
-      logFinalMovement(nextPos, "direct-move");
+      Position constrainedNext = nextPos;
+      const char *moveReason = "direct-move";
+      if (gameMap_) {
+        Position clipped = clipMovementToTerrain(*unit, currentPos, nextPos);
+        if (clipped != nextPos) {
+          constrainedNext = clipped;
+          moveReason = "terrain-contact";
+          unit->setTargetPosition(constrainedNext);
+        }
+      }
+
+      unit->updatePosition(constrainedNext);
+      logFinalMovement(constrainedNext, moveReason);
     }
   }
 }
@@ -206,12 +231,18 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity &unit,
 
   const float distance = currentPos.distanceTo(targetPos);
   if (distance <= 0.001f || deltaTime <= 0.0f) {
-    return targetPos;
+      Position clipped = targetPos;
+      if (gameMap_) {
+        clipped = clipMovementToTerrain(unit, currentPos, targetPos);
+      }
+      return clipped;
   }
 
-  // 地形ごとの移動速度補正を反映（森・山などは multiplier < 1.0）
-  const float speedMultiplier = terrainSpeedMultiplier(currentPos);
-  const float effectiveSpeed = unit.getStats().getMoveSpeed() * speedMultiplier;
+  // 現在位置の地形倍率を取得（ユニットが立っている地形が移動速度を決める）
+  const float speedMultiplier = terrainSpeedMultiplier(unit, currentPos);
+  const float baseSpeed = unit.getStats().getMoveSpeed();
+  const float effectiveSpeed = baseSpeed * speedMultiplier;
+  
   if (effectiveSpeed <= 0.0f) {
     return currentPos;
   }
@@ -228,7 +259,11 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity &unit,
   }
 
   if (travelDistance >= distance - 1e-5f) {
-    return targetPos;
+    if (gameMap_) {
+      Position clipped = clipMovementToTerrain(unit, currentPos, targetPos);
+      return applyBounds(unit, clipped);
+    }
+    return applyBounds(unit, targetPos);
   }
 
   const float stepRatio = travelDistance / distance;
@@ -239,6 +274,7 @@ Position MovementUseCase::calculateNextPosition(const UnitEntity &unit,
   if (gameMap_) {
     candidate = gameMap_->resolveMovementTarget(
         currentPos, candidate, unit.getStats().getCollisionRadius());
+    candidate = clipMovementToTerrain(unit, currentPos, candidate);
   }
 
   return applyBounds(unit, candidate);
@@ -335,12 +371,14 @@ Position MovementUseCase::applyBounds(const UnitEntity &unit,
   return bounded;
 }
 
-float MovementUseCase::terrainSpeedMultiplier(const Position &position) const {
+float MovementUseCase::terrainSpeedMultiplier(const UnitEntity &unit,
+                                              const Position &position) const {
   if (!gameMap_) {
     return 1.0f;
   }
-  // GameMap 側は TerrainType の定義に基づき 0.0〜1.0 の係数を返す
-  return std::max(0.0f, gameMap_->getMovementMultiplier(position));
+  // ユニットの衝突半径が侵入する全タイルを評価し、最も厳しい地形倍率を採用する
+  const float radius = unit.getStats().getCollisionRadius();
+  return std::max(0.0f, gameMap_->getMovementMultiplier(position, radius));
 }
 
 Position
@@ -353,4 +391,15 @@ MovementUseCase::resolveTerrainConstraints(const UnitEntity &unit,
         start, bounded, unit.getStats().getCollisionRadius());
   }
   return bounded;
+}
+
+Position MovementUseCase::clipMovementToTerrain(const UnitEntity &unit,
+                                                const Position &start,
+                                                const Position &desired) const {
+  if (!gameMap_) {
+    return desired;
+  }
+  const float radius = unit.getStats().getCollisionRadius();
+  auto rayResult = gameMap_->clipMovementRaycast(start, desired, radius);
+  return rayResult.position;
 }
