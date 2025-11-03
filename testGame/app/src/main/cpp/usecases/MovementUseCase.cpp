@@ -2,6 +2,7 @@
 #include "../domain/services/MovementField.h"
 #include "../frameworks/android/AndroidOut.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 MovementUseCase::MovementUseCase(
@@ -93,7 +94,37 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position &targetPosition) {
     return false;
   }
 
-  unit->setTargetPosition(avoidanceTarget);
+  // 移動命令前の状態をログ出力
+  aout << "MovementUseCase::moveUnitTo Unit " << unit->getId()
+       << " state=" << unit->getStateString()
+       << " from=(" << fromPosition.getX() << ", " << fromPosition.getY() << ")"
+       << " to=(" << avoidanceTarget.getX() << ", " << avoidanceTarget.getY() << ")"
+       << std::endl;
+
+  bool setResult = unit->setTargetPosition(avoidanceTarget);
+  
+  // 新しい移動命令を受け取ったら、1秒間は攻撃意思を抑制
+  // これにより移動中に敵を無視して通過できる
+  if (setResult) {
+    auto now = std::chrono::high_resolution_clock::now();
+    float nowSec = std::chrono::duration<float>(now.time_since_epoch()).count();
+    unit->suppressAttackFor(nowSec, 1.0f); // 1秒間攻撃意思を抑制
+    
+    aout << "MovementUseCase::moveUnitTo attack suppressed for 1 second" << std::endl;
+  }
+  
+  aout << "MovementUseCase::moveUnitTo setTargetPosition result=" 
+       << (setResult ? "success" : "failed")
+       << " newState=" << unit->getStateString()
+       << std::endl;
+
+  if (!setResult) {
+    if (movementFailedCallback_) {
+      movementFailedCallback_(*unit, targetPosition, 
+                              "setTargetPosition failed - unit cannot move in current state");
+    }
+    return false;
+  }
 
   if (movementEventCallback_) {
     movementEventCallback_(*unit, fromPosition, avoidanceTarget);
@@ -110,12 +141,59 @@ bool MovementUseCase::moveUnitTo(int unitId, const Position &targetPosition) {
 }
 
 void MovementUseCase::updateMovements(float deltaTime) {
+  // 現在時刻を取得（攻撃意思のチェックに使用）
+  auto now = std::chrono::high_resolution_clock::now();
+  float nowSec = std::chrono::duration<float>(now.time_since_epoch()).count();
+  
   for (auto &unit : units_) {
     if (!unit || unit->getStats().getCurrentHp() <= 0) {
       continue;
     }
-    if (unit->getState() != UnitState::MOVING) {
-      continue;
+    // 移動が必要かチェック：目標位置と現在位置が異なる場合のみ処理
+    // これにより、MOVING状態でもCOMBAT状態でも、移動命令があれば移動できる
+    if (unit->getPosition() == unit->getTargetPosition()) {
+      continue; // 移動の必要なし
+    }
+    
+    // デバッグ：移動処理開始
+    bool wantsAttack = unit->wantsToAttack(nowSec);
+    aout << "MovementUseCase::updateMovements: Unit " << unit->getId()
+         << " state=" << unit->getStateString()
+         << " wantsAttack=" << (wantsAttack ? "YES" : "NO")
+         << " pos=(" << unit->getPosition().getX() << ", " << unit->getPosition().getY() << ")"
+         << " target=(" << unit->getTargetPosition().getX() << ", " << unit->getTargetPosition().getY() << ")"
+         << std::endl;
+
+    // 敵が攻撃範囲に入った時の自動停止は、MOVING状態で攻撃意思がある場合のみ適用
+    // 攻撃したくない状態の場合は、敵を無視して移動を継続
+    if (unit->getState() == UnitState::MOVING && wantsAttack) {
+      auto enemyInRange = findEnemyInAttackRange(*unit);
+      if (enemyInRange) {
+        // 攻撃範囲ギリギリの位置を計算（現在位置を返す）
+        Position attackRangePos = calculateAttackRangePosition(*unit, *enemyInRange);
+        Position currentPos = unit->getPosition();
+        float distanceToEnemy = currentPos.distanceTo(enemyInRange->getPosition());
+        float distanceToStop = currentPos.distanceTo(attackRangePos);
+        
+        // 現在位置で停止するため、目標位置を現在位置に設定してからCOMBAT状態に遷移
+        // setTargetPosition()を使わず、直接状態を変更
+        unit->enterCombat(); // 戦闘状態に遷移（これによりその場で停止）
+        
+        aout << "MovementUseCase: Unit " << unit->getId() 
+             << " AUTO-STOPPED - enemy " << enemyInRange->getId() 
+             << " in attack range (distance to enemy: " << distanceToEnemy << ")"
+             << std::endl
+             << "  Current pos: (" << currentPos.getX() << ", " << currentPos.getY() << ")"
+             << " -> Stop pos: (" << attackRangePos.getX() << ", " << attackRangePos.getY() << ")"
+             << " (distance to stop: " << distanceToStop << ")"
+             << std::endl
+             << "  Attack range: " << unit->getStats().getAttackRange()
+             << ", State changed to COMBAT"
+             << std::endl;
+        
+        // 移動処理をスキップ（その場で停止）
+        continue;
+      }
     }
 
     unit->setTargetPosition(applyBounds(*unit, unit->getTargetPosition()));
@@ -402,4 +480,53 @@ Position MovementUseCase::clipMovementToTerrain(const UnitEntity &unit,
   const float radius = unit.getStats().getCollisionRadius();
   auto rayResult = gameMap_->clipMovementRaycast(start, desired, radius);
   return rayResult.position;
+}
+
+std::shared_ptr<UnitEntity>
+MovementUseCase::findEnemyInAttackRange(const UnitEntity &unit) const {
+  // 攻撃範囲内の敵ユニットを検索
+  for (const auto &otherUnit : units_) {
+    if (!otherUnit || otherUnit->getId() == unit.getId()) {
+      continue; // 自分自身は除外
+    }
+
+    if (otherUnit->getStats().getCurrentHp() <= 0) {
+      continue; // 死亡ユニットは除外
+    }
+
+    // 同陣営は攻撃対象外
+    if (otherUnit->getFaction() == unit.getFaction()) {
+      continue;
+    }
+
+    // 攻撃範囲チェック（衝突半径を考慮）
+    if (unit.isInAttackRange(*otherUnit)) {
+      return otherUnit;
+    }
+  }
+
+  return nullptr;
+}
+
+Position MovementUseCase::calculateAttackRangePosition(
+    const UnitEntity &unit, const UnitEntity &enemy) const {
+  // 攻撃範囲の判定は既に isInAttackRange() で行われている
+  // 条件: 距離 <= 攻撃範囲 + 敵の衝突半径
+  // この条件を満たした時点で停止すればよいので、現在位置をそのまま返す
+  
+  Position currentPos = unit.getPosition();
+  Position enemyPos = enemy.getPosition();
+  
+  float distance = currentPos.distanceTo(enemyPos);
+  float attackRange = unit.getStats().getAttackRange();
+  float enemyRadius = enemy.getStats().getCollisionRadius();
+  
+  aout << "calculateAttackRangePosition: distance=" << distance
+       << ", attackRange=" << attackRange 
+       << ", enemyRadius=" << enemyRadius
+       << ", threshold=" << (attackRange + enemyRadius)
+       << std::endl;
+  
+  // 既に攻撃範囲内なので、現在位置で停止
+  return currentPos;
 }

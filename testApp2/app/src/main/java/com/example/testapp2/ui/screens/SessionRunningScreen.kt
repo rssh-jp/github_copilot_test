@@ -367,6 +367,40 @@ fun ScoreHistorySection(
                 
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
                 
+                // 合計行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "合計",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(40.dp)
+                    )
+                    
+                    Text(
+                        text = "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(100.dp)
+                    )
+                    
+                    users.forEach { user ->
+                        val totalScore = scoreHistory.sumOf { record ->
+                            record.scores[user.id] ?: 0
+                        }
+                        Text(
+                            text = totalScore.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                
                 // 履歴データ（最新順）
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 200.dp),

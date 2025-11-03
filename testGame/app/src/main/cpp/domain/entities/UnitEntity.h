@@ -58,7 +58,8 @@ public:
              const UnitStats &stats, int faction = 0)
       : id_(id), name_(name), position_(position), stats_(stats),
         targetPosition_(position), state_(UnitState::IDLE),
-        lastAttackTime_(-1000.0f), faction_(faction) {}
+        lastAttackTime_(-1000.0f), faction_(faction), 
+        suppressAttackUntil_(0.0f) {} // 0.0fで初期化 = デフォルトで攻撃したい状態
 
   // コピー・ムーブセマンティクス
   UnitEntity(const UnitEntity &) = default;
@@ -83,10 +84,12 @@ public:
 
   /**
    * @brief ユニットが移動可能かチェック
+   * 
+   * 戦闘中(COMBAT)でも移動可能にするため、DEAD以外の状態で移動を許可します。
+   * これにより、敵ユニットに接近して攻撃モードになった後も移動が可能になります。
    */
   bool canMove() const {
-    return isAlive() &&
-           (state_ == UnitState::IDLE || state_ == UnitState::MOVING);
+    return isAlive() && state_ != UnitState::DEAD;
   }
 
   /**
@@ -172,6 +175,10 @@ public:
    * @brief 移動先を設定
    * @param newTarget 新しい移動先
    * @return 設定に成功したかどうか
+   * 
+   * 新しい移動目標を設定すると、目標位置が現在位置と異なる場合は
+   * MOVING状態に遷移します。これにより、COMBAT状態からでも
+   * 新しい移動を開始でき、移動中に再び敵を検出できます。
    */
   bool setTargetPosition(const Position &newTarget) {
     if (!canMove()) {
@@ -182,8 +189,8 @@ public:
 
     /**
      * Set a new movement target for this unit.
-     * If the new target differs from current position, the unit enters MOVING
-     * state.
+     * 目標位置が現在位置と異なる場合は常にMOVING状態に遷移
+     * これにより、COMBAT状態からでも新しい移動を開始できる
      */
     if (position_ != targetPosition_) {
       state_ = UnitState::MOVING;
@@ -197,13 +204,21 @@ public:
   /**
    * @brief 位置を更新（移動処理）
    * @param newPosition 新しい位置
+   * 
+   * 目標位置に到達した場合、MOVING状態からIDLEに遷移します。
+   * ただし、COMBAT状態の場合は、戦闘中に少し移動しただけなので
+   * COMBAT状態を維持します（戦闘からの離脱はexitCombat()で明示的に行う）。
    */
   void updatePosition(const Position &newPosition) {
     position_ = newPosition;
 
     // 目標位置に到達したかチェック
     if (position_ == targetPosition_) {
-      state_ = UnitState::IDLE;
+      // MOVING状態の場合のみIDLEに遷移
+      // COMBAT状態の場合は戦闘状態を維持
+      if (state_ == UnitState::MOVING) {
+        state_ = UnitState::IDLE;
+      }
     }
   }
 
@@ -354,6 +369,45 @@ public:
 
     // 最後の攻撃時刻をリセット
     lastAttackTime_ = -1000.0f;
+    
+    // 攻撃抑制をリセット（0.0fで初期化 = 攻撃したい状態）
+    suppressAttackUntil_ = 0.0f;
+  }
+
+  /**
+   * @brief 攻撃意思があるかチェック
+   * @param currentTime 現在時刻（秒）
+   * @return 攻撃する意思があるかどうか
+   * @note 初期状態（suppressAttackUntil_ = 0.0f）では常に攻撃意思ありとなる
+   */
+  bool wantsToAttack(float currentTime) const {
+    // suppressAttackUntil_ が現在時刻より前なら攻撃意思あり
+    // 初期値0.0fなので、デフォルトでは攻撃したい状態
+    return currentTime >= suppressAttackUntil_;
+  }
+
+  /**
+   * @brief 一定時間攻撃を抑制する
+   * @param currentTime 現在時刻（秒）
+   * @param duration 抑制する時間（秒）
+   */
+  void suppressAttackFor(float currentTime, float duration) {
+    suppressAttackUntil_ = currentTime + duration;
+  }
+
+  /**
+   * @brief 攻撃抑制を即座に解除
+   */
+  void clearAttackSuppression() {
+    suppressAttackUntil_ = 0.0f;
+  }
+
+  /**
+   * @brief 攻撃抑制状態かどうかを取得
+   * @param currentTime 現在時刻（秒）
+   */
+  bool isAttackSuppressed(float currentTime) const {
+    return currentTime < suppressAttackUntil_;
   }
 
   // 等価性は ID で判定（エンティティの特性）
@@ -370,6 +424,7 @@ private:
   UnitState state_;         // 現在の状態
   float lastAttackTime_;    // 最後の攻撃時刻
   int faction_;             // 陣営ID（0: default / neutral）
+  float suppressAttackUntil_; // この時刻まで攻撃を抑制（秒）
 };
 
 #endif // SIMULATION_GAME_UNIT_ENTITY_H

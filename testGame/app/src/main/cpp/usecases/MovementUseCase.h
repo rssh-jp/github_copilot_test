@@ -117,6 +117,22 @@ private:
   getOtherUnits(const UnitEntity &excludeUnit) const;
 
   /**
+   * @brief 攻撃範囲内に敵ユニットがいるかチェック
+   * @param unit チェック対象のユニット
+   * @return 攻撃範囲内に敵がいる場合はそのユニット、いない場合はnullptr
+   */
+  std::shared_ptr<UnitEntity> findEnemyInAttackRange(const UnitEntity &unit) const;
+
+  /**
+   * @brief 敵に対して攻撃範囲ギリギリの位置を計算
+   * @param unit 移動するユニット
+   * @param enemy 敵ユニット
+   * @return 攻撃範囲の境界上の位置
+   */
+  Position calculateAttackRangePosition(const UnitEntity &unit, 
+                                        const UnitEntity &enemy) const;
+
+  /**
    * @brief 指定ユニットの次フレームでの位置を計算
    */
   Position calculateNextPosition(const UnitEntity &unit, float deltaTime) const;

@@ -13,6 +13,7 @@
  * - This module should not perform rendering or platform IO. Use callbacks to
  * notify higher layers about combat events (for UI / audio / effects).
  */
+#include "../frameworks/android/AndroidOut.h"
 #include <algorithm>
 #include <chrono>
 
@@ -38,14 +39,26 @@ void CombatUseCase::executeAutoCombat() {
 
     // Find a target inside effective range (considering collision radii)
     auto target = findTargetInRange(*unit);
+    
+    // COMBAT状態で敵が範囲外に出た場合、戦闘状態から離脱
+    if (unit->getState() == UnitState::COMBAT && !target) {
+      unit->exitCombat();
+      aout << "CombatUseCase: Unit " << unit->getId() 
+           << " exited COMBAT state - no enemy in range"
+           << " - New state: " << unit->getStateString()
+           << std::endl;
+      continue;
+    }
+    
     if (!(target && target->getStats().getCurrentHp() > 0)) {
       continue;
     }
 
     // 攻撃可能かどうか（攻撃速度によるクールダウンを尊重）
-    // Do not attack if the unit is currently moving; require it to be idle or
-    // already in combat.
+    // COMBAT状態のユニットは移動しながらでも攻撃可能
+    // MOVING状態（戦闘前の移動）のユニットは攻撃不可
     if (unit->getState() == UnitState::MOVING) {
+      // 純粋な移動中（まだ戦闘に入っていない）は攻撃しない
       continue;
     }
 
@@ -59,6 +72,15 @@ void CombatUseCase::executeAutoCombat() {
 
     // 攻撃時刻の更新（ユースケース側で管理）
     unit->setLastAttackTime(nowSec);
+
+    // 攻撃実行のログ
+    aout << "CombatUseCase: Unit " << unit->getId() 
+         << " (state=" << unit->getStateString() << ")"
+         << " ATTACKED enemy " << target->getId()
+         << " - Damage: " << result.damageDealt
+         << ", Target HP: " << target->getStats().getCurrentHp()
+         << "/" << target->getStats().getMaxHp()
+         << std::endl;
 
     // イベント通知
     if (combatEventCallback_) {
@@ -84,8 +106,8 @@ bool CombatUseCase::executeAttack(int attackerId, int targetId) {
   }
 
   // 攻撃範囲チェック
-  // Ensure attacker is not moving (must have completed movement) before
-  // allowing manual attack
+  // COMBAT状態のユニットは移動中でも攻撃可能
+  // MOVING状態（純粋な移動中）のユニットは攻撃不可
   if (attacker->getState() == UnitState::MOVING) {
     return false;
   }
