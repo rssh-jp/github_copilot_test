@@ -38,8 +38,15 @@ fun SessionDetailScreen(
     val tempUsers = remember { mutableStateListOf<String>() }
     val currentUsers = if (isNewSession) tempUsers else users
     
+    // コピー成功メッセージ用のSnackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scopeSnackbar = rememberCoroutineScope()
+    
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
     Column(
-        modifier = modifier.padding(16.dp).fillMaxSize()
+        modifier = modifier.padding(16.dp).fillMaxSize().padding(paddingValues)
     ) {
         // セッションの基本情報
         Card(
@@ -161,6 +168,44 @@ fun SessionDetailScreen(
                         )
                     }
                 }
+                
+                // 既存セッションの場合：セッションコピーボタンを表示
+                if (!isNewSession && currentUsers.isNotEmpty()) {
+                    val scopeCopy = rememberCoroutineScope()
+                    OutlinedButton(
+                        onClick = {
+                            val newName = "${session?.name} (コピー)"
+                            if (db != null) {
+                                scopeCopy.launch {
+                                    val copiedSession = appState.copySessionWithDb(db, sessionId, newName)
+                                    if (copiedSession != null) {
+                                        scopeSnackbar.launch {
+                                            snackbarHostState.showSnackbar(
+                                                message = "新しいセッション「${copiedSession.name}」を作成しました",
+                                                duration = SnackbarDuration.Short
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                val copiedSession = appState.copySession(sessionId, newName)
+                                if (copiedSession != null) {
+                                    scopeSnackbar.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = "新しいセッション「${copiedSession.name}」を作成しました",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    ) {
+                        Text("同じメンバーで新しいセッションを作成")
+                    }
+                }
             }
         }
         
@@ -278,6 +323,7 @@ fun SessionDetailScreen(
                 }
             }
         }
+    }
     }
 }
 

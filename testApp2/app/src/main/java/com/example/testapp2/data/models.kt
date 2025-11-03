@@ -116,6 +116,27 @@ class AppState {
     }
 
     /**
+     * 既存のセッションをコピーして新しいセッションを作成（ユーザーのみコピー）
+     * @param sourceSessionId コピー元のセッションID
+     * @param newName 新しいセッション名
+     * @return 作成されたセッションオブジェクト、コピー元が見つからない場合はnull
+     */
+    fun copySession(sourceSessionId: Int, newName: String): Session? {
+        val sourceSession = sessions.find { it.id == sourceSessionId } ?: return null
+        val sourceUsers = getSessionUsers(sourceSessionId)
+        
+        // 新しいセッションを作成
+        val newSession = addSession(newName)
+        
+        // ユーザーをコピー（スコアは0で初期化）
+        sourceUsers.forEach { user ->
+            addUserToSession(newSession.id, user.name)
+        }
+        
+        return newSession
+    }
+
+    /**
      * セッションにユーザーを追加
      * @param sessionId 対象セッションID
      * @param userName ユーザー名
@@ -279,6 +300,26 @@ class AppState {
         val idx = sessions.indexOfFirst { it === session }
         if (idx >= 0) sessions[idx] = session.copy(id = newId)
         return newId
+    }
+
+    /**
+     * セッションをコピーしてデータベースにも保存
+     * @param db Room データベースインスタンス
+     * @param sourceSessionId コピー元のセッションID
+     * @param newName 新しいセッション名
+     * @return 作成されたセッションオブジェクト、コピー元が見つからない場合はnull
+     */
+    suspend fun copySessionWithDb(db: com.example.testapp2.data.db.AppDatabase, sourceSessionId: Int, newName: String): Session? {
+        val newSession = copySession(sourceSessionId, newName) ?: return null
+        
+        // データベースに保存
+        val dbSessionId = persistNewSession(db, newSession)
+        val newUsers = getSessionUsers(newSession.id)
+        newUsers.forEach { user ->
+            persistNewUser(db, user)
+        }
+        
+        return sessions.find { it.id == dbSessionId }
     }
 
     /**
