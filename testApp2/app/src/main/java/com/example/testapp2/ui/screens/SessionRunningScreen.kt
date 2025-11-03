@@ -160,11 +160,7 @@ fun SessionRunningScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "参加者スコア",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    
+                    // 左手操作用にボタンを左側に配置
                     val scope = rememberCoroutineScope()
                     Button(
                         onClick = {
@@ -216,6 +212,11 @@ fun SessionRunningScreen(
                         Spacer(Modifier.width(4.dp))
                         Text("スコア登録")
                     }
+                    
+                    Text(
+                        text = "参加者スコア",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -247,13 +248,30 @@ fun SessionRunningScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(users) { user ->
-                        // 参加者情報とスコア入力欄
+                        // 参加者情報とスコア入力欄（左手操作用に左側配置）
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // スコア入力欄を左側に配置
+                            OutlinedTextField(
+                                value = userScores[user.id] ?: "",
+                                onValueChange = { value ->
+                                    // 数字のみ許可
+                                    if (value.isEmpty() || value.all { it.isDigit() }) {
+                                        userScores[user.id] = value
+                                    }
+                                },
+                                label = { Text("新スコア") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.width(100.dp),
+                                singleLine = true
+                            )
+                            
+                            Spacer(Modifier.width(8.dp))
+                            
                             Icon(
                                 Icons.Default.Person,
                                 contentDescription = "ユーザー",
@@ -277,21 +295,6 @@ fun SessionRunningScreen(
                                     color = MaterialTheme.colorScheme.secondary
                                 )
                             }
-                            
-                            // スコア入力欄
-                            OutlinedTextField(
-                                value = userScores[user.id] ?: "",
-                                onValueChange = { value ->
-                                    // 数字のみ許可
-                                    if (value.isEmpty() || value.all { it.isDigit() }) {
-                                        userScores[user.id] = value
-                                    }
-                                },
-                                label = { Text("新スコア") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.width(100.dp),
-                                singleLine = true
-                            )
                         }
                         Divider()
                     }

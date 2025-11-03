@@ -30,6 +30,7 @@ fun SessionListScreen(
         modifier = modifier.padding(16.dp).fillMaxSize()
     ) {
         // ヘッダー部分（タイトルと新規セッション作成ボタン）
+        // 左手操作用にボタンを左側に配置
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -37,12 +38,7 @@ fun SessionListScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "セッション一覧",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            
-            // 新しいセッション作成ボタン
+            // 新しいセッション作成ボタンを左側に配置
             Button(
                 onClick = { 
                     // 一時的なセッションIDとして-1を使用（まだDB未登録）
@@ -55,6 +51,11 @@ fun SessionListScreen(
                     Text("新規セッション")
                 }
             }
+            
+            Text(
+                text = "セッション一覧",
+                style = MaterialTheme.typography.headlineMedium
+            )
         }
         
         if (appState.sessions.isEmpty()) {

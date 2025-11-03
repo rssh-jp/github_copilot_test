@@ -224,37 +224,44 @@ fun SessionDetailScreen(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
-                OutlinedTextField(
-                    value = userName,
-                    onValueChange = { userName = it },
-                    label = { Text("ユーザー名") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                
-                val scope = rememberCoroutineScope()
-                Button(
-                    onClick = {
-                        if (userName.isNotBlank()) {
-                            if (isNewSession) {
-                                // 新規セッションの場合：一時的なリストに追加
-                                tempUsers.add(userName.trim())
-                            } else {
-                                // 既存セッションの場合：通常通りDB登録
-                                val user = appState.addUserToSession(sessionId, userName)
-                                if (db != null) {
-                                    scope.launch { appState.persistNewUser(db, user) }
-                                }
-                            }
-                            userName = ""
-                        }
-                    },
-                    modifier = Modifier.padding(top = 8.dp)
+                // 左手操作用：ボタンと入力フィールドを横並びに配置
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = "追加")
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("ユーザーを追加")
+                    val scope = rememberCoroutineScope()
+                    Button(
+                        onClick = {
+                            if (userName.isNotBlank()) {
+                                if (isNewSession) {
+                                    // 新規セッションの場合：一時的なリストに追加
+                                    tempUsers.add(userName.trim())
+                                } else {
+                                    // 既存セッションの場合：通常通りDB登録
+                                    val user = appState.addUserToSession(sessionId, userName)
+                                    if (db != null) {
+                                        scope.launch { appState.persistNewUser(db, user) }
+                                    }
+                                }
+                                userName = ""
+                            }
+                        },
+                        modifier = Modifier.wrapContentWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Add, contentDescription = "追加")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("追加")
+                        }
                     }
+                    
+                    OutlinedTextField(
+                        value = userName,
+                        onValueChange = { userName = it },
+                        label = { Text("ユーザー名") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
