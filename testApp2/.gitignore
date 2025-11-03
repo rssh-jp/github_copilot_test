@@ -1,18 +1,55 @@
+# ===========================
+# 機密情報・署名関連
+# ===========================
 keystore.properties
 *.jks
 *.keystore
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+*.p12
+*.key
+
+# ===========================
+# Gradle関連
+# ===========================
+.gradle/
+/build/
+/*/build/
+*.gradle.kts.*.bin
+
+# ===========================
+# ローカル設定
+# ===========================
 local.properties
+
+# ===========================
+# IDE設定（IntelliJ IDEA / Android Studio）
+# ===========================
+*.iml
+.idea/
+# ただし、以下は共有する
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/vcs.xml
+
+# ===========================
+# Android Studio関連
+# ===========================
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+output.json
+
+# ===========================
+# OS関連
+# ===========================
+.DS_Store
+Thumbs.db
+
+# ===========================
+# その他
+# ===========================
+*.log
+*.swp
+*~
+.navigation/
