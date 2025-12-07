@@ -3,6 +3,7 @@ package com.example.testapp2.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -409,14 +410,15 @@ fun ScoreHistorySection(
                     modifier = Modifier.heightIn(max = 200.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(scoreHistory.reversed()) { record ->
+                    itemsIndexed(scoreHistory.reversed()) { index, record ->
+                        val sessionRoundNumber = scoreHistory.size - index
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // スコアID
                             Text(
-                                text = "#${record.id}",
+                                text = "#$sessionRoundNumber",
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.width(40.dp)
                             )
