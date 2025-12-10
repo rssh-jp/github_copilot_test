@@ -94,11 +94,23 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 ```
 
 ### リリースビルド
-署名付きAPKを作成するには、プロジェクトルートに `keystore.properties` を作成し、キーストア情報を設定してください。
+署名付きAPKまたはAABを作成するには、プロジェクトルートに `keystore.properties` を作成し、キーストア情報を設定してください。
 
 1.  `keystore.properties.sample` をコピーして `keystore.properties` を作成。
 2.  自身のキーストア情報に合わせて内容を編集。
-3.  以下のコマンドを実行。
+3.  以下のコマンドを実行（**必ずバックグラウンド実行**）。
+
+```powershell
+# Google Play リリース用 (AAB形式 - 推奨)
+.\gradlew.bat bundleRelease
+
+# 配布用 (APK形式)
+.\gradlew.bat assembleRelease
+```
+
+生成されたファイルは以下に出力されます：
+-   AAB: `app/build/outputs/bundle/release/`
+-   APK: `app/build/outputs/apk/release/`
 
 ```powershell
 # リリースビルドの作成
