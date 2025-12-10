@@ -16,3 +16,13 @@ keystore.properties
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystore and Certificates
+*.pem
+*.zip
+*.p12
+
+# Build Artifacts
+*.apk
+*.aab
+*.jar

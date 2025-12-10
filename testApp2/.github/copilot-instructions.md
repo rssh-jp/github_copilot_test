@@ -78,6 +78,16 @@ app/src/main/java/com/example/testapp2/
     -   コマンド例: `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleRelease`
     -   **絶対に**完了するまで待機してください。プロセスがハングしているように見えても、バックグラウンドで処理が続いている可能性があります。途中で中断したり、諦めたりすることは**禁止**です。出力が止まっているように見えても、完了メッセージが出るまで待ち続けてください。
 
+## バージョン管理
+アプリのバージョン情報は `app/build.gradle.kts` 内の `android { defaultConfig { ... } }` ブロックで定義されています。
+
+-   **versionCode**: 整数値。Google Play ストアに新しいバージョンをアップロードするたびに、**必ず**以前の値より大きくする必要があります（例: 1 -> 2 -> 3）。
+-   **versionName**: 文字列。ユーザーに表示されるバージョン番号です（例: "1.0", "1.1"）。
+
+**更新タイミング**:
+-   Google Play Console に新しい AAB/APK をアップロードする前。
+-   `versionCode` が重複しているとアップロードエラーになります。
+
 ## ビルドと実行
 ### Windows (PowerShell)
 Android Studioがインストールされている場合、同梱のJDKを使用してビルドできます。
