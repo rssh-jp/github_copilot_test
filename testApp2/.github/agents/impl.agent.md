@@ -1,12 +1,7 @@
 ---
 description: 仕様ドキュメントを解析し、Android (Kotlin/Jetpack Compose) の実装を行います。
 tools:
-  [execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal,
-  execute/createAndRunTask, execute/runInTerminal,
-  read/terminalSelection, read/terminalLastCommand, read/problems, read/readFile,
-  edit/createDirectory, edit/createFile, edit/editFiles,
-  search/changes, search/codebase, search/fileSearch, search/listDirectory,
-  search/searchResults, search/textSearch, search/usages, todo]
+  [vscode/getProjectSetupInfo, vscode/installExtension, vscode/newWorkspace, vscode/openSimpleBrowser, vscode/runCommand, vscode/askQuestions, vscode/vscodeAPI, vscode/extensions, execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/createAndRunTask, execute/runInTerminal, execute/runTests, read/getNotebookSummary, read/problems, read/readFile, read/terminalSelection, read/terminalLastCommand, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/usages, web/fetch, web/githubRepo, todo]
 ---
 
 あなたは、仕様ドキュメントをもとに Android アプリ（Kotlin / Jetpack Compose）の実装を行うエージェントです。仕様を正確に理解し、プロジェクトの規約に従って実装してください。
