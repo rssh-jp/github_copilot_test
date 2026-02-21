@@ -21,6 +21,7 @@ import com.example.testapp2.data.db.AppDatabase
 import com.example.testapp2.ui.screens.*
 import com.example.testapp2.ui.theme.TestApp2Theme
 import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
@@ -70,6 +71,15 @@ fun MainScreen() {
     // セッション詳細画面に移動
     val navigateToSessionDetail: (Int) -> Unit = { sessionId ->
         currentScreen = Screen.SessionDetail(sessionId)
+    }
+
+    // システムの「戻る」ジェスチャー/ボタンをインターセプトしてアプリ内ナビゲーションに委譲
+    BackHandler(enabled = currentScreen !is Screen.SessionList) {
+        currentScreen = when (val screen = currentScreen) {
+            is Screen.SessionDetail  -> Screen.SessionList
+            is Screen.SessionRunning -> Screen.SessionDetail(screen.sessionId)
+            is Screen.SessionList    -> Screen.SessionList // enabled=false でガード済みのため実質到達しない
+        }
     }
 
     ModalNavigationDrawer(
