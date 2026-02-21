@@ -18,6 +18,7 @@
 | Test | `.github/agents/test.agent.md` | 実装コードの自動テスト実装 |
 | TechLead | `.github/agents/techlead.agent.md` | テックリードとしてのコードレビュー |
 | Quality | `.github/agents/quality.agent.md` | 総合的な品質チェックと最終承認 |
+| Release | `.github/agents/release.agent.md` | リリースビルド（AAB/APK）の作成と成果物確認 |
 
 ## ワークフロー
 
@@ -40,7 +41,11 @@
     ↓（要修正の場合は Impl へ戻る）
 [Quality] → 品質レポート
     ↓
-[Git] → コミット → プッシュ → PR 作成
+[Git] → コミット
+    ↓
+[Release] → リリースビルド（AAB）
+    ↓（失敗の場合は Impl へ戻る）
+[Git] → プッシュ → PR 作成
     ↓
 完了
 ```
