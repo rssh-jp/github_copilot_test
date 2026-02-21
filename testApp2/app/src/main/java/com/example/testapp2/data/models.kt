@@ -1,5 +1,6 @@
 package com.example.testapp2.data
 
+import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
@@ -85,7 +86,7 @@ class AppState {
      * 指定セッションのスコア履歴を取得（getSessionScoreHistoryのエイリアス）
      */
     fun getScoreHistory(sessionId: Int): List<ScoreRecord> {
-        return scoreRecords.filter { it.sessionId == sessionId }
+        return getSessionScoreHistory(sessionId)
     }
 
     /**
@@ -265,23 +266,27 @@ class AppState {
      * @param db Room データベースインスタンス
      */
     suspend fun loadFromDb(db: com.example.testapp2.data.db.AppDatabase) {
-        val sessionEntities = withContext(Dispatchers.IO) { db.sessionDao().getAll() }
-        val userEntities = withContext(Dispatchers.IO) { db.userDao().getAll() }
-        val recordEntities = withContext(Dispatchers.IO) { db.scoreDao().getAllRecords() }
-        val items = withContext(Dispatchers.IO) { db.scoreDao().getAllItems() }
+        try {
+            val sessionEntities = withContext(Dispatchers.IO) { db.sessionDao().getAll() }
+            val userEntities = withContext(Dispatchers.IO) { db.userDao().getAll() }
+            val recordEntities = withContext(Dispatchers.IO) { db.scoreDao().getAllRecords() }
+            val items = withContext(Dispatchers.IO) { db.scoreDao().getAllItems() }
 
-        sessions.clear(); users.clear(); scoreRecords.clear()
+            sessions.clear(); users.clear(); scoreRecords.clear()
 
-        sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
-        users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
+            sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
+            users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
 
-        val itemsByRecord = items.groupBy { it.recordId }
-        scoreRecords.addAll(recordEntities.map { rec ->
-            val map = itemsByRecord[rec.id]?.associate { it.userId to it.delta } ?: emptyMap()
-            ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map)
-        })
+            val itemsByRecord = items.groupBy { it.recordId }
+            scoreRecords.addAll(recordEntities.map { rec ->
+                val map = itemsByRecord[rec.id]?.associate { it.userId to it.delta } ?: emptyMap()
+                ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map)
+            })
 
-        sessions.map { it.id }.forEach { recalcSessionTotals(it) }
+            sessions.map { it.id }.forEach { recalcSessionTotals(it) }
+        } catch (e: Exception) {
+            Log.e("AppState", "DB読み込みエラー: ${e.message}", e)
+        }
     }
 
     /**
@@ -291,15 +296,20 @@ class AppState {
      * @return データベースで生成されたID
      */
     suspend fun persistNewSession(db: com.example.testapp2.data.db.AppDatabase, session: Session): Int {
-        val newId = withContext(Dispatchers.IO) {
-            db.sessionDao().insert(
-                com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
-            ).toInt()
+        return try {
+            val newId = withContext(Dispatchers.IO) {
+                db.sessionDao().insert(
+                    com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
+                ).toInt()
+            }
+            // 生成IDをメモリに反映
+            val idx = sessions.indexOfFirst { it === session }
+            if (idx >= 0) sessions[idx] = session.copy(id = newId)
+            newId
+        } catch (e: Exception) {
+            Log.e("AppState", "セッション保存エラー: ${e.message}", e)
+            session.id
         }
-        // Reflect generated ID in memory
-        val idx = sessions.indexOfFirst { it === session }
-        if (idx >= 0) sessions[idx] = session.copy(id = newId)
-        return newId
     }
 
     /**
@@ -328,13 +338,17 @@ class AppState {
      * @param user 保存対象のユーザー
      */
     suspend fun persistNewUser(db: com.example.testapp2.data.db.AppDatabase, user: User) {
-        val newId = withContext(Dispatchers.IO) {
-            db.userDao().insert(
-                com.example.testapp2.data.db.UserEntity(sessionId = user.sessionId, name = user.name, score = user.score)
-            ).toInt()
+        try {
+            val newId = withContext(Dispatchers.IO) {
+                db.userDao().insert(
+                    com.example.testapp2.data.db.UserEntity(sessionId = user.sessionId, name = user.name, score = user.score)
+                ).toInt()
+            }
+            val idx = users.indexOfFirst { it === user }
+            if (idx >= 0) users[idx] = user.copy(id = newId)
+        } catch (e: Exception) {
+            Log.e("AppState", "ユーザー保存エラー: ${e.message}", e)
         }
-        val idx = users.indexOfFirst { it === user }
-        if (idx >= 0) users[idx] = user.copy(id = newId)
     }
 
     /**
@@ -346,8 +360,12 @@ class AppState {
      * @param timestamp 記録時刻（ミリ秒）
      */
     suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long) {
-        withContext(Dispatchers.IO) {
-            db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+        try {
+            withContext(Dispatchers.IO) {
+                db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "スコア記録保存エラー: ${e.message}", e)
         }
     }
 
@@ -357,10 +375,14 @@ class AppState {
      * @param sessionId 対象セッションID
      */
     suspend fun persistSessionTotals(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
-        withContext(Dispatchers.IO) {
-            users.filter { it.sessionId == sessionId }.forEach { u ->
-                db.userDao().updateScore(u.id, u.score)
+        try {
+            withContext(Dispatchers.IO) {
+                users.filter { it.sessionId == sessionId }.forEach { u ->
+                    db.userDao().updateScore(u.id, u.score)
+                }
             }
+        } catch (e: Exception) {
+            Log.e("AppState", "スコア合計保存エラー: ${e.message}", e)
         }
     }
 
@@ -371,7 +393,11 @@ class AppState {
      * @param name 新しいセッション名
      */
     suspend fun persistUpdateSessionName(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, name: String) {
-        withContext(Dispatchers.IO) { db.sessionDao().updateName(sessionId, name) }
+        try {
+            withContext(Dispatchers.IO) { db.sessionDao().updateName(sessionId, name) }
+        } catch (e: Exception) {
+            Log.e("AppState", "セッション名更新エラー: ${e.message}", e)
+        }
     }
 
     /**
@@ -381,7 +407,11 @@ class AppState {
      * @param elapsedSeconds 累積経過時間（秒）
      */
     suspend fun persistUpdateSessionElapsed(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, elapsedSeconds: Int) {
-        withContext(Dispatchers.IO) { db.sessionDao().updateElapsed(sessionId, elapsedSeconds) }
+        try {
+            withContext(Dispatchers.IO) { db.sessionDao().updateElapsed(sessionId, elapsedSeconds) }
+        } catch (e: Exception) {
+            Log.e("AppState", "経過時間更新エラー: ${e.message}", e)
+        }
     }
 
     /**
@@ -391,7 +421,76 @@ class AppState {
      * @param sessionId 削除対象セッションID
      */
     suspend fun deleteSession(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int) {
-        withContext(Dispatchers.IO) { db.sessionDao().deleteById(sessionId) }
-        deleteSessionLocal(sessionId)
+        try {
+            withContext(Dispatchers.IO) { db.sessionDao().deleteById(sessionId) }
+            deleteSessionLocal(sessionId)
+        } catch (e: Exception) {
+            Log.e("AppState", "セッション削除エラー: ${e.message}", e)
+        }
+    }
+
+    // =====================
+    // ユーザー削除
+    // =====================
+
+    /**
+     * ユーザーをメモリから削除
+     * @param userId 削除対象ユーザーID
+     */
+    fun removeUserLocal(userId: Int) {
+        users.removeAll { it.id == userId }
+    }
+
+    /**
+     * ユーザーをデータベースとメモリの両方から削除
+     * @param db Room データベースインスタンス
+     * @param userId 削除対象ユーザーID
+     */
+    suspend fun deleteUser(db: com.example.testapp2.data.db.AppDatabase, userId: Int) {
+        try {
+            withContext(Dispatchers.IO) { db.userDao().deleteById(userId) }
+            removeUserLocal(userId)
+        } catch (e: Exception) {
+            Log.e("AppState", "ユーザー削除エラー: ${e.message}", e)
+        }
+    }
+
+    // =====================
+    // スコアレコードDB永続化
+    // =====================
+
+    /**
+     * スコアレコードをデータベースから削除
+     * score_items は CASCADE により自動削除される
+     * @param db Room データベースインスタンス
+     * @param scoreId 削除対象スコアレコードID
+     */
+    suspend fun persistDeleteScoreRecord(db: com.example.testapp2.data.db.AppDatabase, scoreId: Int) {
+        try {
+            withContext(Dispatchers.IO) { db.scoreDao().deleteRecord(scoreId) }
+        } catch (e: Exception) {
+            Log.e("AppState", "スコアレコードDB削除エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * スコアレコードの内容をデータベースで更新
+     * 既存の score_items を削除して新しい内容で再挿入する
+     * @param db Room データベースインスタンス
+     * @param scoreId 更新対象スコアレコードID
+     * @param newScores 新しいスコアマップ（ユーザーID -> 得点）
+     */
+    suspend fun persistUpdateScoreRecord(db: com.example.testapp2.data.db.AppDatabase, scoreId: Int, newScores: Map<Int, Int>) {
+        try {
+            withContext(Dispatchers.IO) {
+                db.scoreDao().deleteItemsByRecordId(scoreId)
+                val items = newScores.map { (userId, delta) ->
+                    com.example.testapp2.data.db.ScoreItemEntity(recordId = scoreId, userId = userId, delta = delta)
+                }
+                db.scoreDao().insertItems(items)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "スコアレコードDB更新エラー: ${e.message}", e)
+        }
     }
 }

@@ -59,7 +59,7 @@ fun SessionItem(
             }
             
             if (expanded && users.isNotEmpty()) {
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 Column {
                     users.forEach { user ->

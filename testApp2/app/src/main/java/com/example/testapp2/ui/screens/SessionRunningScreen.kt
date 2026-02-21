@@ -8,6 +8,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,17 +19,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
 import com.example.testapp2.data.ScoreRecord
 import com.example.testapp2.data.User
 import com.example.testapp2.ui.theme.TestApp2Theme
-import kotlinx.coroutines.delay
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import java.text.SimpleDateFormat
-import java.util.*
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun SessionRunningScreen(
@@ -59,6 +57,9 @@ fun SessionRunningScreen(
     var lastScoreId by remember { mutableStateOf<Int?>(null) }
     // 情報メッセージ（全員0などの通知）
     var infoMessage by remember { mutableStateOf<String?>(null) }
+    // スコア編集ダイアログ用状態
+    var editingRecord by remember { mutableStateOf<ScoreRecord?>(null) }
+    val scopeHistory = rememberCoroutineScope()
     
     // UI更新用のタイマー（DB保存はライフサイクルに合わせて行う）
     LaunchedEffect(Unit) {
@@ -109,40 +110,35 @@ fun SessionRunningScreen(
     
     Column(
         modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // セッションの基本情報
+        // セッションの基本情報（コンパクト表示）
         Card(
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = session?.name ?: "不明なセッション",
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
-                Text(
-                    text = "実行中",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-                
-                // タイマー表示
+                // 左：セッション名 + 実行中バッジ
+                Column {
+                    Text(
+                        text = session?.name ?: "不明なセッション",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "実行中 · ${users.size}名",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                // 右：タイマー
                 Text(
                     text = String.format("%02d:%02d:%02d", hours, minutes, seconds),
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-                
-                Text(
-                    text = "参加者数: ${users.size}名",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 8.dp)
+                    style = MaterialTheme.typography.headlineMedium,
                 )
             }
         }
@@ -297,7 +293,7 @@ fun SessionRunningScreen(
                                 )
                             }
                         }
-                        Divider()
+                        HorizontalDivider()
                     }
                 }
             }
@@ -315,126 +311,245 @@ fun SessionRunningScreen(
         if (showHistory) {
             ScoreHistorySection(
                 scoreHistory = appState.getScoreHistory(sessionId),
-                users = users
+                users = users,
+                onDeleteRecord = { record ->
+                    appState.deleteScoreRecord(sessionId, record.id)
+                    if (db != null) {
+                        scopeHistory.launch { appState.persistDeleteScoreRecord(db, record.id) }
+                    }
+                },
+                onEditRecord = { record -> editingRecord = record }
             )
         }
     }
+
+    // スコア編集ダイアログ
+    editingRecord?.let { record ->
+        ScoreEditDialog(
+            record = record,
+            users = users,
+            onConfirm = { newScores ->
+                appState.updateScoreRecord(sessionId, record.id, newScores)
+                if (db != null) {
+                    scopeHistory.launch { appState.persistUpdateScoreRecord(db, record.id, newScores) }
+                }
+                editingRecord = null
+            },
+            onDismiss = { editingRecord = null }
+        )
+    }
+}
+
+/**
+ * スコアレコードの編集ダイアログ
+ * @param record 編集対象のスコアレコード
+ * @param users セッション参加者一覧
+ * @param onConfirm 保存時のコールバック（新しいスコアマップ）
+ * @param onDismiss キャンセル時のコールバック
+ */
+@Composable
+fun ScoreEditDialog(
+    record: ScoreRecord,
+    users: List<User>,
+    onConfirm: (Map<Int, Int>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val editScores = remember {
+        mutableStateMapOf<Int, String>().apply {
+            users.forEach { user -> this[user.id] = record.scores[user.id]?.toString() ?: "0" }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("スコアを編集") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                users.forEach { user ->
+                    OutlinedTextField(
+                        value = editScores[user.id] ?: "0",
+                        onValueChange = { value ->
+                            if (value.isEmpty() || value.all { it.isDigit() }) {
+                                editScores[user.id] = value
+                            }
+                        },
+                        label = { Text(user.name) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(editScores.mapValues { (_, v) -> v.toIntOrNull() ?: 0 })
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        }
+    )
 }
 
 @Composable
 fun ScoreHistorySection(
     scoreHistory: List<ScoreRecord>,
-    users: List<User>
+    users: List<User>,
+    onDeleteRecord: ((ScoreRecord) -> Unit)? = null,
+    onEditRecord: ((ScoreRecord) -> Unit)? = null,
 ) {
-    val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-    
+    // ボタン列の幅（編集+削除アイコン分）
+    val buttonColumnWidth = when {
+        onEditRecord != null && onDeleteRecord != null -> 56.dp
+        onEditRecord != null || onDeleteRecord != null -> 28.dp
+        else -> 0.dp
+    }
+
+    // 合計得点順ソートの ON/OFF
+    var sortByTotal by remember { mutableStateOf(false) }
+
+    // 合計得点を計算し、ソート済みユーザーリストを生成
+    val userTotals = remember(scoreHistory, users) {
+        users.associateWith { user -> scoreHistory.sumOf { it.scores[user.id] ?: 0 } }
+    }
+    val displayUsers = if (sortByTotal) {
+        users.sortedByDescending { userTotals[it] ?: 0 }
+    } else {
+        users
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = "スコア履歴",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
+            // タイトル行：「スコア履歴」 + 合計順ソートトグル
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "スコア履歴",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                FilterChip(
+                    selected = sortByTotal,
+                    onClick = { sortByTotal = !sortByTotal },
+                    label = { Text("合計順", style = MaterialTheme.typography.labelSmall) }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             if (scoreHistory.isEmpty()) {
                 Text("履歴がありません", modifier = Modifier.padding(vertical = 8.dp))
             } else {
-                // ヘッダー行
+                // ヘッダー行（ラウンド番号 + ユーザー名 + ボタン列）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "ID",
+                        text = "#",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.width(40.dp)
+                        modifier = Modifier.width(32.dp)
                     )
-                    
-                    Text(
-                        text = "時刻",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.width(100.dp)
-                    )
-                    
-                    users.forEach { user ->
+                    displayUsers.forEach { user ->
                         Text(
                             text = user.name,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
                     }
+                    // ボタン列確保（ヘッダーと合計行を揃えるためのスペーサー）
+                    if (buttonColumnWidth > 0.dp) {
+                        Spacer(modifier = Modifier.width(buttonColumnWidth))
+                    }
                 }
-                
-                Divider(modifier = Modifier.padding(vertical = 4.dp))
-                
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                 // 合計行
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "合計",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.width(40.dp)
+                        modifier = Modifier.width(32.dp)
                     )
-                    
-                    Text(
-                        text = "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.width(100.dp)
-                    )
-                    
-                    users.forEach { user ->
-                        val totalScore = scoreHistory.sumOf { record ->
-                            record.scores[user.id] ?: 0
-                        }
+                    displayUsers.forEach { user ->
                         Text(
-                            text = totalScore.toString(),
+                            text = (userTotals[user] ?: 0).toString(),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                    if (buttonColumnWidth > 0.dp) {
+                        Spacer(modifier = Modifier.width(buttonColumnWidth))
+                    }
                 }
-                
-                Divider(modifier = Modifier.padding(vertical = 4.dp))
-                
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                 // 履歴データ（最新順）
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 200.dp),
+                    modifier = Modifier.heightIn(max = 250.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     itemsIndexed(scoreHistory.reversed()) { index, record ->
-                        val sessionRoundNumber = scoreHistory.size - index
+                        val roundNumber = scoreHistory.size - index
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // スコアID
+                            // ラウンド番号
                             Text(
-                                text = "#$sessionRoundNumber",
+                                text = "#$roundNumber",
                                 style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.width(40.dp)
+                                modifier = Modifier.width(32.dp)
                             )
-                            
-                            Text(
-                                text = dateFormat.format(record.timestamp),
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.width(100.dp)
-                            )
-                            
-                            users.forEach { user ->
+                            displayUsers.forEach { user ->
                                 Text(
                                     text = record.scores[user.id]?.toString() ?: "-",
                                     style = MaterialTheme.typography.bodySmall,
                                     modifier = Modifier.weight(1f)
                                 )
+                            }
+                            // 編集ボタン
+                            if (onEditRecord != null) {
+                                IconButton(
+                                    onClick = { onEditRecord(record) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "編集",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            // 削除ボタン
+                            if (onDeleteRecord != null) {
+                                IconButton(
+                                    onClick = { onDeleteRecord(record) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "削除",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }

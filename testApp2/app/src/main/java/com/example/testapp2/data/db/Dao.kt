@@ -33,6 +33,9 @@ interface UserDao {
 
     @Query("UPDATE users SET score = :score WHERE id = :id")
     suspend fun updateScore(id: Int, score: Int)
+
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteById(id: Int)
 }
 
 @Dao
@@ -54,6 +57,12 @@ interface ScoreDao {
 
     @Query("SELECT * FROM score_items")
     suspend fun getAllItems(): List<ScoreItemEntity>
+
+    @Query("DELETE FROM score_records WHERE id = :id")
+    suspend fun deleteRecord(id: Int)
+
+    @Query("DELETE FROM score_items WHERE recordId = :recordId")
+    suspend fun deleteItemsByRecordId(recordId: Int)
 
     @Transaction
     suspend fun insertRecordWithItems(sessionId: Int, recordId: Int, timestamp: Long, userDeltas: Map<Int, Int>) {

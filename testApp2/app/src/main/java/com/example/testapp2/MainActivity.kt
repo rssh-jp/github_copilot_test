@@ -77,7 +77,7 @@ fun MainScreen() {
         drawerContent = {
             ModalDrawerSheet {
                 Text("メニュー", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
-                Divider()
+                HorizontalDivider()
                 menuItems.forEach { menuType ->
                     NavigationDrawerItem(
                         label = { Text(menuType.title) },
@@ -116,9 +116,17 @@ fun MainScreen() {
                     // セッション詳細画面/実行画面の場合は戻るボタンを表示
                     actions = {
                         when (currentScreen) {
-                is Screen.SessionDetail -> {
-                                IconButton(onClick = { 
-                    currentScreen = Screen.SessionList
+                            is Screen.SessionDetail -> {
+                                IconButton(onClick = {
+                                    currentScreen = Screen.SessionList
+                                }) {
+                                    Text("戻る")
+                                }
+                            }
+                            is Screen.SessionRunning -> {
+                                val sid = (currentScreen as Screen.SessionRunning).sessionId
+                                IconButton(onClick = {
+                                    currentScreen = Screen.SessionDetail(sid)
                                 }) {
                                     Text("戻る")
                                 }

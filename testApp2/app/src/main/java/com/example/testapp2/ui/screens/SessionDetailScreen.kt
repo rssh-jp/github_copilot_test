@@ -5,10 +5,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +40,10 @@ fun SessionDetailScreen(
     // コピー成功メッセージ用のSnackbar
     val snackbarHostState = remember { SnackbarHostState() }
     val scopeSnackbar = rememberCoroutineScope()
+    // ユーザー削除用のコルーチンスコープ
+    val scopeUserDel = rememberCoroutineScope()
+    // セッションコピー用のコルーチンスコープ
+    val scopeCopy = rememberCoroutineScope()
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -171,7 +174,6 @@ fun SessionDetailScreen(
                 
                 // 既存セッションの場合：セッションコピーボタンを表示
                 if (!isNewSession && currentUsers.isNotEmpty()) {
-                    val scopeCopy = rememberCoroutineScope()
                     OutlinedButton(
                         onClick = {
                             val newName = "${session?.name} (コピー)"
@@ -317,13 +319,26 @@ fun SessionDetailScreen(
                                             text = "0点",
                                             style = MaterialTheme.typography.bodyMedium
                                         )
+                                        IconButton(onClick = { tempUsers.remove(userName) }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "削除")
+                                        }
                                     }
                                 }
                             }
                         } else {
                             items(users) { user ->
-                                UserItem(user = user)
-                                Divider()
+                                UserItem(
+                                    user = user,
+                                    onDelete = {
+                                        if (db != null) {
+                                            // deleteUser が内部で removeUserLocal も呼ぶ
+                                            scopeUserDel.launch { appState.deleteUser(db, user.id) }
+                                        } else {
+                                            appState.removeUserLocal(user.id)
+                                        }
+                                    }
+                                )
+                                HorizontalDivider()
                             }
                         }
                     }

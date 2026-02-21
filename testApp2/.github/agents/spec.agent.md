@@ -1,7 +1,7 @@
 ---
 description: ユーザーの要望を解析し、実装可能な仕様・設計ドキュメントを作成します。
 tools:
-  [read/readFile, read/fetch, search/codebase, search/fileSearch, search/textSearch,
+  [read/readFile, search/codebase, search/fileSearch, search/textSearch,
   search/listDirectory, todo]
 ---
 
