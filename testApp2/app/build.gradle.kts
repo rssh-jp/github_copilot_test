@@ -1,5 +1,9 @@
 import java.util.Properties
 
+// CI では VERSION_CODE 環境変数を使用。ローカルではフォールバック値を使用。
+val appVersionCode: Int = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 5
+val appVersionName: String = "1.3"
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,8 +19,8 @@ android {
         applicationId = "jp.rssh.testapp2"
         minSdk = 35
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.3"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
