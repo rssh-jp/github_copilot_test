@@ -98,6 +98,18 @@ fun CategoryBrowserScreen(
     val itemLayoutCoords = remember { HashMap<String, LayoutCoordinates>() }
     // ルートゾーンの座標（配列でラップして参照渡しを実現）
     val rootZoneCoordsHolder = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    // 親BoxのウィンドウTopLeft座標記録用（ローカル座標→ウィンドウ座標変換に使用）
+    val parentBoxCoordsHolder = remember { arrayOfNulls<LayoutCoordinates>(1) }
+
+    // categoryId が変わるたびにドラッグ状態と座標マップをリセット
+    LaunchedEffect(categoryId) {
+        itemLayoutCoords.clear()
+        rootZoneCoordsHolder[0] = null  // デタッチ済み参照を解放
+        draggingItem = null
+        dragOffset = Offset.Zero
+        hoveredCategoryId = null
+        isHoveringRoot = false
+    }
 
     // ドラッグ中かどうか
     val isDragging = draggingItem != null
@@ -108,19 +120,20 @@ fun CategoryBrowserScreen(
      * @param excludeCategoryId ホバー対象から除外するカテゴリID（ドラッグ元）
      */
     fun updateHoverState(pos: Offset, excludeCategoryId: Int?) {
-        // ルートゾーン上かどうかをチェック
-        val rootBounds = rootZoneCoordsHolder[0]?.boundsInWindow()
+        // ルートゾーン上かどうかをチェック（isAttached を確認してからアクセス）
+        val rootCoords = rootZoneCoordsHolder[0]
+        val rootBounds = if (rootCoords != null && rootCoords.isAttached) rootCoords.boundsInWindow() else null
         isHoveringRoot = rootBounds != null && rootBounds.contains(pos)
         if (isHoveringRoot) {
             hoveredCategoryId = null
             return
         }
-        // カテゴリのホバーをチェック（ドラッグ中のカテゴリ自身は除外）
+        // カテゴリのホバーをチェック（ドラッグ中のカテゴリ自身は除外・デタッチ済みは除外）
         hoveredCategoryId = itemLayoutCoords.entries
             .filter { it.key.startsWith("cat_") }
             .firstOrNull { (key, coords) ->
                 val id = key.removePrefix("cat_").toIntOrNull()
-                id != null && id != excludeCategoryId && coords.boundsInWindow().contains(pos)
+                id != null && id != excludeCategoryId && coords.isAttached && coords.boundsInWindow().contains(pos)
             }
             ?.key?.removePrefix("cat_")?.toIntOrNull()
     }
@@ -173,7 +186,70 @@ fun CategoryBrowserScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                .onGloballyPositioned { coords ->
+                    // 親BoxのウィンドウTopLeft座標を記録（座標変換に使用）
+                    parentBoxCoordsHolder[0] = coords
+                }
+                .pointerInput(categoryId) {
+                    // categoryId が変わるたびに再初期化（最新の categoryId をクロージャに取り込む）
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { localOffset ->
+                            // ローカル座標をウィンドウ座標に変換
+                            val parentTopLeft = parentBoxCoordsHolder[0]?.boundsInWindow()?.topLeft
+                                ?: return@detectDragGesturesAfterLongPress
+                            val windowOffset = parentTopLeft + localOffset
+                            // タッチ位置のウィンドウ座標からドラッグ対象アイテムを特定
+                            val catEntry = itemLayoutCoords.entries
+                                .filter { it.key.startsWith("cat_") }
+                                .firstOrNull { (_, itemCoords) ->
+                                    itemCoords.isAttached && itemCoords.boundsInWindow().contains(windowOffset)
+                                }
+                            val sesEntry = if (catEntry == null) {
+                                itemLayoutCoords.entries
+                                    .filter { it.key.startsWith("ses_") }
+                                    .firstOrNull { (_, itemCoords) ->
+                                        itemCoords.isAttached && itemCoords.boundsInWindow().contains(windowOffset)
+                                    }
+                            } else null
+                            when {
+                                catEntry != null -> {
+                                    val id = catEntry.key.removePrefix("cat_").toIntOrNull()
+                                        ?: return@detectDragGesturesAfterLongPress
+                                    val cat = appState.getChildCategories(categoryId).find { it.id == id }
+                                        ?: return@detectDragGesturesAfterLongPress
+                                    draggingItem = DraggableItem.CategoryItem(cat)
+                                    dragOffset = windowOffset
+                                }
+                                sesEntry != null -> {
+                                    val id = sesEntry.key.removePrefix("ses_").toIntOrNull()
+                                        ?: return@detectDragGesturesAfterLongPress
+                                    val ses = appState.getSessionsByCategory(categoryId).find { it.id == id }
+                                        ?: return@detectDragGesturesAfterLongPress
+                                    draggingItem = DraggableItem.SessionItem(ses)
+                                    dragOffset = windowOffset
+                                }
+                            }
+                        },
+                        onDrag = { change, dragAmount ->
+                            if (draggingItem != null) {
+                                change.consume()
+                                dragOffset += dragAmount
+                                val dragCatId = (draggingItem as? DraggableItem.CategoryItem)?.category?.id
+                                updateHoverState(dragOffset, dragCatId)
+                            }
+                        },
+                        onDragEnd = {
+                            if (draggingItem != null) {
+                                handleDrop()
+                                resetDragState()
+                            }
+                        },
+                        onDragCancel = {
+                            resetDragState()
+                        },
+                    )
+                },
         ) {
             // ===== メインコンテンツ =====
             if (!isDragging && childCategories.isEmpty() && sessions.isEmpty()) {
@@ -206,6 +282,7 @@ fun CategoryBrowserScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
+                    userScrollEnabled = !isDragging,  // ドラッグ中はスクロールを無効化
                 ) {
                     // ===== ルートへ移動ゾーン（ドラッグ中のみ表示） =====
                     if (isDragging) {
@@ -264,33 +341,6 @@ fun CategoryBrowserScreen(
                                     .onGloballyPositioned { coords ->
                                         // カテゴリの画面座標を記録
                                         itemLayoutCoords["cat_${category.id}"] = coords
-                                    }
-                                    .pointerInput(category.id) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = { offset ->
-                                                // アイテムのウィンドウ座標を取得して絶対位置を計算
-                                                val bounds = itemLayoutCoords["cat_${category.id}"]
-                                                    ?.boundsInWindow()
-                                                    ?: return@detectDragGesturesAfterLongPress
-                                                draggingItem = DraggableItem.CategoryItem(category)
-                                                dragOffset = bounds.topLeft + offset
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragOffset += dragAmount
-                                                // ドラッグ中カテゴリIDを自身の除外対象として渡す
-                                                val dragCatId = (draggingItem as? DraggableItem.CategoryItem)
-                                                    ?.category?.id
-                                                updateHoverState(dragOffset, dragCatId)
-                                            },
-                                            onDragEnd = {
-                                                handleDrop()
-                                                resetDragState()
-                                            },
-                                            onDragCancel = {
-                                                resetDragState()
-                                            },
-                                        )
                                     }
                                     .then(
                                         // ドラッグ中はタップによる画面遷移を抑制
@@ -376,30 +426,6 @@ fun CategoryBrowserScreen(
                                     .onGloballyPositioned { coords ->
                                         // セッションの画面座標を記録
                                         itemLayoutCoords["ses_${session.id}"] = coords
-                                    }
-                                    .pointerInput(session.id) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = { offset ->
-                                                val bounds = itemLayoutCoords["ses_${session.id}"]
-                                                    ?.boundsInWindow()
-                                                    ?: return@detectDragGesturesAfterLongPress
-                                                draggingItem = DraggableItem.SessionItem(session)
-                                                dragOffset = bounds.topLeft + offset
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragOffset += dragAmount
-                                                // セッションはカテゴリへのみドロップ可能（自身除外なし）
-                                                updateHoverState(dragOffset, null)
-                                            },
-                                            onDragEnd = {
-                                                handleDrop()
-                                                resetDragState()
-                                            },
-                                            onDragCancel = {
-                                                resetDragState()
-                                            },
-                                        )
                                     },
                             ) {
                                 SessionItem(
@@ -430,9 +456,13 @@ fun CategoryBrowserScreen(
                     Card(
                         modifier = Modifier
                             .offset {
+                                // ウィンドウ座標から親BoxのローカルTopLeftを差し引いて相対座標に変換
+                                val parentTopLeft = parentBoxCoordsHolder[0]?.boundsInWindow()?.topLeft
+                                    ?: Offset.Zero
+                                val localPos = dragOffset - parentTopLeft
                                 IntOffset(
-                                    dragOffset.x.toInt(),
-                                    dragOffset.y.toInt(),
+                                    localPos.x.toInt(),
+                                    localPos.y.toInt(),
                                 )
                             }
                             .alpha(0.5f)

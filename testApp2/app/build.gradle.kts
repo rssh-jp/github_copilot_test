@@ -1,8 +1,8 @@
 import java.util.Properties
 
 // CI では VERSION_CODE 環境変数を使用。ローカルではフォールバック値を使用。
-val appVersionCode: Int = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 7
-val appVersionName: String = "1.5"
+val appVersionCode: Int = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 8
+val appVersionName: String = "1.6"
 
 plugins {
     alias(libs.plugins.android.application)
