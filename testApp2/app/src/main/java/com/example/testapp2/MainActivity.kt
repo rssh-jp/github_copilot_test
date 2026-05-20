@@ -184,7 +184,8 @@ fun MainScreen() {
                         appState = appState,
                         db = db,
                         sessionId = screen.sessionId,
-                        onStartSession = { sid -> currentScreen = Screen.SessionRunning(sid) }
+                        onStartSession = { sid -> currentScreen = Screen.SessionRunning(sid) },
+                        onNavigateToSession = { sid -> currentScreen = Screen.SessionDetail(sid) }
                     )
                 }
                 is Screen.SessionRunning -> {
