@@ -20,6 +20,10 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE parentId IS NULL ORDER BY sortOrder, id")
     suspend fun getRoots(): List<CategoryEntity>
 
+    /** 指定カテゴリの親IDを更新 */
+    @Query("UPDATE categories SET parentId = :parentId WHERE id = :id")
+    suspend fun updateParentId(id: Int, parentId: Int?)
+
     /** IDでカテゴリを削除（Roomの自己参照FKはアプリ側で再帰削除を管理） */
     @Query("DELETE FROM categories WHERE id = :id")
     suspend fun deleteById(id: Int)
@@ -47,6 +51,9 @@ interface SessionDao {
 
     @Query("UPDATE sessions SET elapsedTime = :elapsed WHERE id = :id")
     suspend fun updateElapsed(id: Int, elapsed: Int)
+
+    @Query("UPDATE sessions SET categoryId = :categoryId WHERE id = :id")
+    suspend fun updateCategoryId(id: Int, categoryId: Int?)
 
     @Query("DELETE FROM sessions WHERE id = :id")
     suspend fun deleteById(id: Int)
