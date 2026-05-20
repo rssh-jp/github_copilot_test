@@ -101,6 +101,16 @@ fun CategoryBrowserScreen(
     // 親BoxのウィンドウTopLeft座標記録用（ローカル座標→ウィンドウ座標変換に使用）
     val parentBoxCoordsHolder = remember { arrayOfNulls<LayoutCoordinates>(1) }
 
+    // categoryId が変わるたびにドラッグ状態と座標マップをリセット
+    LaunchedEffect(categoryId) {
+        itemLayoutCoords.clear()
+        rootZoneCoordsHolder[0] = null  // デタッチ済み参照を解放
+        draggingItem = null
+        dragOffset = Offset.Zero
+        hoveredCategoryId = null
+        isHoveringRoot = false
+    }
+
     // ドラッグ中かどうか
     val isDragging = draggingItem != null
 
@@ -181,8 +191,8 @@ fun CategoryBrowserScreen(
                     // 親BoxのウィンドウTopLeft座標を記録（座標変換に使用）
                     parentBoxCoordsHolder[0] = coords
                 }
-                .pointerInput(Unit) {
-                    // 各アイテムへの個別 pointerInput をなくし、親 Box で一括処理する
+                .pointerInput(categoryId) {
+                    // categoryId が変わるたびに再初期化（最新の categoryId をクロージャに取り込む）
                     detectDragGesturesAfterLongPress(
                         onDragStart = { localOffset ->
                             // ローカル座標をウィンドウ座標に変換
