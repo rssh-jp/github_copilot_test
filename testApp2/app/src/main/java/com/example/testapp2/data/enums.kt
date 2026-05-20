@@ -2,12 +2,13 @@ package com.example.testapp2.data
 
 // メニュータイプを定義
 enum class MenuType(val title: String) {
-    SESSION_LIST("一覧")
+    CATEGORY_BROWSER("ブラウザ")
 }
 
 // アプリの画面状態を定義
 sealed class Screen {
-    object SessionList : Screen()
+    /** カテゴリブラウザ画面（categoryId=null でルート表示） */
+    data class CategoryBrowser(val categoryId: Int?) : Screen()
     data class SessionDetail(val sessionId: Int) : Screen()
-    data class SessionRunning(val sessionId: Int) : Screen() // セッション実行中の画面
+    data class SessionRunning(val sessionId: Int) : Screen()
 }

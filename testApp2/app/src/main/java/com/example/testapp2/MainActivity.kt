@@ -53,32 +53,42 @@ fun MainScreen() {
         isLoaded = true
     }
     
-    // 現在の画面状態 - 初期値を一覧画面に変更
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.SessionList) }
+    // 現在の画面状態 - 初期値をカテゴリブラウザ（ルート）に設定
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.CategoryBrowser(null)) }
     
-    // 初期選択メニューも一覧に合わせる
-    var selectedMenu by remember { mutableStateOf(MenuType.SESSION_LIST) }
+    // 初期選択メニューもカテゴリブラウザに合わせる
+    var selectedMenu by remember { mutableStateOf(MenuType.CATEGORY_BROWSER) }
 
     // メニュー選択時に画面状態を更新
     val onMenuItemSelected: (MenuType) -> Unit = { menuType ->
         selectedMenu = menuType
         currentScreen = when (menuType) {
-            MenuType.SESSION_LIST -> Screen.SessionList
+            MenuType.CATEGORY_BROWSER -> Screen.CategoryBrowser(null)
         }
         scope.launch { drawerState.close() }
     }
     
-    // セッション詳細画面に移動
-    val navigateToSessionDetail: (Int) -> Unit = { sessionId ->
-        currentScreen = Screen.SessionDetail(sessionId)
-    }
+    // CategoryBrowserScreen から SessionDetail に遷移するコールバックは
+    // CategoryBrowserScreen の onNavigateToSession から直接処理する
 
     // システムの「戻る」ジェスチャー/ボタンをインターセプトしてアプリ内ナビゲーションに委譲
-    BackHandler(enabled = currentScreen !is Screen.SessionList) {
+    // ルートカテゴリブラウザ（categoryId=null）以外で有効
+    BackHandler(
+        enabled = currentScreen !is Screen.CategoryBrowser ||
+            (currentScreen as Screen.CategoryBrowser).categoryId != null
+    ) {
         currentScreen = when (val screen = currentScreen) {
-            is Screen.SessionDetail  -> Screen.SessionList
+            is Screen.SessionDetail -> {
+                // セッションが属するカテゴリへ戻る
+                val session = appState.sessions.find { it.id == screen.sessionId }
+                Screen.CategoryBrowser(session?.categoryId)
+            }
             is Screen.SessionRunning -> Screen.SessionDetail(screen.sessionId)
-            is Screen.SessionList    -> Screen.SessionList // enabled=false でガード済みのため実質到達しない
+            is Screen.CategoryBrowser -> {
+                // 親カテゴリへ戻る
+                val parentId = appState.categories.find { it.id == screen.categoryId }?.parentId
+                Screen.CategoryBrowser(parentId)
+            }
         }
     }
 
@@ -103,15 +113,21 @@ fun MainScreen() {
                 TopAppBar(
                     title = {
                         Text(
-                            when (currentScreen) {
-                                is Screen.SessionList -> "セッション一覧"
+                            when (val screen = currentScreen) {
+                                is Screen.CategoryBrowser -> {
+                                    val name = screen.categoryId?.let { id ->
+                                        appState.categories.find { it.id == id }?.name
+                                    }
+                                    // ルート時は「得点集計」、子カテゴリ時はカテゴリ名を表示
+                                    name ?: "得点集計"
+                                }
                                 is Screen.SessionDetail -> {
-                                    val sessionId = (currentScreen as Screen.SessionDetail).sessionId
+                                    val sessionId = screen.sessionId
                                     val session = appState.sessions.find { it.id == sessionId }
                                     "セッション: ${session?.name ?: ""}"
                                 }
                                 is Screen.SessionRunning -> {
-                                    val sessionId = (currentScreen as Screen.SessionRunning).sessionId
+                                    val sessionId = screen.sessionId
                                     val session = appState.sessions.find { it.id == sessionId }
                                     "実行中: ${session?.name ?: ""}"
                                 }
@@ -125,18 +141,18 @@ fun MainScreen() {
                     },
                     // セッション詳細画面/実行画面の場合は戻るボタンを表示
                     actions = {
-                        when (currentScreen) {
+                        when (val screen = currentScreen) {
                             is Screen.SessionDetail -> {
                                 IconButton(onClick = {
-                                    currentScreen = Screen.SessionList
+                                    val session = appState.sessions.find { it.id == screen.sessionId }
+                                    currentScreen = Screen.CategoryBrowser(session?.categoryId)
                                 }) {
                                     Text("戻る")
                                 }
                             }
                             is Screen.SessionRunning -> {
-                                val sid = (currentScreen as Screen.SessionRunning).sessionId
                                 IconButton(onClick = {
-                                    currentScreen = Screen.SessionDetail(sid)
+                                    currentScreen = Screen.SessionDetail(screen.sessionId)
                                 }) {
                                     Text("戻る")
                                 }
@@ -153,30 +169,30 @@ fun MainScreen() {
                 Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else when (currentScreen) {
-                is Screen.SessionList -> SessionListScreen(
+            } else when (val screen = currentScreen) {
+                is Screen.CategoryBrowser -> CategoryBrowserScreen(
                     modifier = Modifier.padding(innerPadding),
                     appState = appState,
                     db = db,
-                    onSessionSelected = navigateToSessionDetail
+                    categoryId = screen.categoryId,
+                    onNavigateToCategory = { id -> currentScreen = Screen.CategoryBrowser(id) },
+                    onNavigateToSession = { sid -> currentScreen = Screen.SessionDetail(sid) }
                 )
                 is Screen.SessionDetail -> {
-                    val sessionId = (currentScreen as Screen.SessionDetail).sessionId
                     SessionDetailScreen(
                         modifier = Modifier.padding(innerPadding),
                         appState = appState,
                         db = db,
-                        sessionId = sessionId,
+                        sessionId = screen.sessionId,
                         onStartSession = { sid -> currentScreen = Screen.SessionRunning(sid) }
                     )
                 }
                 is Screen.SessionRunning -> {
-                    val sessionId = (currentScreen as Screen.SessionRunning).sessionId
                     SessionRunningScreen(
                         modifier = Modifier.padding(innerPadding),
                         appState = appState,
                         db = db,
-                        sessionId = sessionId
+                        sessionId = screen.sessionId
                     )
                 }
             }

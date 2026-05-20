@@ -25,6 +25,7 @@ fun SessionDetailScreen(
     appState: AppState,
     db: com.example.testapp2.data.db.AppDatabase? = null,
     sessionId: Int,
+    categoryId: Int? = null,
     onStartSession: (Int) -> Unit = {}
 ) {
     // 新規セッションの場合（sessionId = -1）と既存セッションの場合を分ける
@@ -91,7 +92,7 @@ fun SessionDetailScreen(
                             if (isNewSession) {
                                 // 新規セッションの場合：セッションとユーザーを作成してDB登録
                                 if (sessionNameEditing.isNotBlank()) {
-                                    val newSession = appState.addSession(sessionNameEditing.trim())
+                                    val newSession = appState.addSession(sessionNameEditing.trim(), categoryId)
                                     // セッションIDの一時保存
                                     val tempSessionId = newSession.id
                                     
