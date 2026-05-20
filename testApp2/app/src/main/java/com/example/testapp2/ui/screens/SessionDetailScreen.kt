@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
+import com.example.testapp2.data.CategoryType
 import com.example.testapp2.data.User
 import com.example.testapp2.ui.components.UserItem
 import com.example.testapp2.ui.theme.TestApp2Theme
@@ -25,7 +26,8 @@ fun SessionDetailScreen(
     appState: AppState,
     db: com.example.testapp2.data.db.AppDatabase? = null,
     sessionId: Int,
-    onStartSession: (Int) -> Unit = {}
+    onStartSession: (Int) -> Unit = {},
+    onManageCategories: (Int) -> Unit = {},
 ) {
     // 新規セッションの場合（sessionId = -1）と既存セッションの場合を分ける
     val isNewSession = sessionId == -1
@@ -206,6 +208,30 @@ fun SessionDetailScreen(
                             .padding(top = 8.dp)
                     ) {
                         Text("同じメンバーで新しいセッションを作成")
+                    }
+                }
+
+                // 既存セッション: カテゴリ管理ボタン + 簡易サマリー
+                if (!isNewSession) {
+                    val rootCategoryCount = appState.getChildCategories(sessionId, null).size
+                    val sectionCount = appState.categories.count {
+                        it.sessionId == sessionId && it.type == CategoryType.SECTION
+                    }
+                    if (rootCategoryCount > 0 || sectionCount > 0) {
+                        Text(
+                            text = "カテゴリ: ${rootCategoryCount}件  セクション: ${sectionCount}件",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onManageCategories(sessionId) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    ) {
+                        Text("カテゴリを管理")
                     }
                 }
             }

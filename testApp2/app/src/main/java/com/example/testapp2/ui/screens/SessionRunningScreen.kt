@@ -32,9 +32,12 @@ fun SessionRunningScreen(
     modifier: Modifier = Modifier,
     appState: AppState,
     db: com.example.testapp2.data.db.AppDatabase? = null,
-    sessionId: Int
+    sessionId: Int,
+    sectionId: Int? = null,
 ) {
     val session = appState.sessions.find { it.id == sessionId }
+    // セクション名（sectionId が指定されている場合に表示）
+    val sectionName = if (sectionId != null) appState.categories.find { it.id == sectionId }?.name else null
     val users = appState.getSessionUsers(sessionId)
     var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
     // 画面入場時刻（同一sessionIdで固定）
@@ -134,6 +137,14 @@ fun SessionRunningScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
+                    // セクション名（指定されている場合のみ表示）
+                    if (sectionName != null) {
+                        Text(
+                            text = "セクション: $sectionName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                 }
                 // 右：タイマー
                 Text(
@@ -175,12 +186,12 @@ fun SessionRunningScreen(
                                         infoMessage = null
                                     }
                                 } else {
-                    val scoreId = appState.addScoreRecord(sessionId, scoreMap)
+                    val scoreId = appState.addScoreRecord(sessionId, scoreMap, sectionId)
                                     lastScoreId = scoreId
                     if (db != null) {
                                         val ts = System.currentTimeMillis()
                                         scope.launch {
-                        appState.persistNewScoreRecord(db, sessionId, scoreId, scoreMap, ts)
+                        appState.persistNewScoreRecord(db, sessionId, scoreId, scoreMap, ts, sectionId)
                         // 合計値も同期
                         appState.persistSessionTotals(db, sessionId)
                                         }

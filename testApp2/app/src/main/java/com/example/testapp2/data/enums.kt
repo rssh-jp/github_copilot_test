@@ -9,5 +9,14 @@ enum class MenuType(val title: String) {
 sealed class Screen {
     object SessionList : Screen()
     data class SessionDetail(val sessionId: Int) : Screen()
-    data class SessionRunning(val sessionId: Int) : Screen() // セッション実行中の画面
+    // カテゴリ一覧画面（parentCategoryId=null でルート表示）
+    data class CategoryBrowser(
+        val sessionId: Int,
+        val parentCategoryId: Int?,
+    ) : Screen()
+    // セッション実行中の画面（sectionId: 紐づくセクションID、null なら旧フロー互換）
+    data class SessionRunning(
+        val sessionId: Int,
+        val sectionId: Int? = null,
+    ) : Screen()
 }

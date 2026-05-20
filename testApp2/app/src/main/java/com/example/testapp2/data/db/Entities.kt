@@ -47,6 +47,7 @@ data class ScoreRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val sessionId: Int,
     val timestamp: Long,
+    val sectionId: Int? = null,   // 紐づくセクション（SECTION型カテゴリ）のID
 )
 
 @Entity(
@@ -66,4 +67,30 @@ data class ScoreItemEntity(
     val recordId: Int,
     val userId: Int,
     val delta: Int,
+)
+
+// カテゴリ（フォルダ/セクション）エンティティ
+// 自己参照の外部キーは Room の制限を避けるため設定しない（parentId は nullable Int で管理）
+@Entity(
+    tableName = "categories",
+    foreignKeys = [
+        ForeignKey(
+            entity = SessionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["sessionId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [
+        Index(value = ["sessionId"]),
+        Index(value = ["parentId"]),
+    ],
+)
+data class CategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val sessionId: Int,
+    val parentId: Int?,       // null はルートカテゴリ（セッション直下）
+    val name: String,
+    val type: String,         // "FOLDER" または "SECTION"
+    val sortOrder: Int = 0,
 )

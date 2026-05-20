@@ -38,12 +38,35 @@ data class User(
  * @param sessionId 対象セッションのID
  * @param timestamp 記録日時
  * @param scores ユーザーID -> そのラウンドでの得点のマップ
+ * @param sectionId 紐づくセクション（SECTION型カテゴリ）のID（null=セクション未分類）
  */
 data class ScoreRecord(
     val id: Int,
     val sessionId: Int,
     val timestamp: Date,
     val scores: Map<Int, Int>,
+    val sectionId: Int? = null,
+)
+
+/** カテゴリ種別 */
+enum class CategoryType { FOLDER, SECTION }
+
+/**
+ * カテゴリ（フォルダまたはセクション）を表すデータクラス
+ * @param id カテゴリの一意識別子
+ * @param sessionId 所属するセッションのID
+ * @param parentId 親カテゴリのID（null はルート）
+ * @param name カテゴリ名
+ * @param type FOLDER（入れ子可能）または SECTION（スコア投入）
+ * @param sortOrder 同階層内での表示順
+ */
+data class Category(
+    val id: Int,
+    val sessionId: Int,
+    val parentId: Int?,
+    val name: String,
+    val type: CategoryType,
+    val sortOrder: Int = 0,
 )
 
 /**
@@ -59,6 +82,8 @@ class AppState {
     val users = mutableStateListOf<User>()
     /** スコア登録履歴一覧（ゲームの記録） */
     val scoreRecords = mutableStateListOf<ScoreRecord>()
+    /** カテゴリ一覧（全セッションのカテゴリ・セクションを保持） */
+    val categories = mutableStateListOf<Category>()
 
     // =====================
     // 基本的なデータ取得メソッド
@@ -178,11 +203,12 @@ class AppState {
      * スコア記録を追加し、ユーザーの累積スコアを再計算
      * @param sessionId 対象セッションID
      * @param userScores ユーザーID -> そのラウンドの得点のマップ
+     * @param sectionId 紐づくセクションID（null=セクション未分類）
      * @return 作成されたスコアレコードのID
      */
-    fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>): Int {
+    fun addScoreRecord(sessionId: Int, userScores: Map<Int, Int>, sectionId: Int? = null): Int {
         val scoreId = (scoreRecords.maxOfOrNull { it.id } ?: 0) + 1
-        val record = ScoreRecord(scoreId, sessionId, Date(), userScores)
+        val record = ScoreRecord(scoreId, sessionId, Date(), userScores, sectionId)
         scoreRecords.add(record)
         // 合計値を再計算して反映
         recalcSessionTotals(sessionId)
@@ -200,6 +226,8 @@ class AppState {
         users.removeAll { it.sessionId == sessionId }
         // 関連スコア履歴削除
         scoreRecords.removeAll { it.sessionId == sessionId }
+        // 関連カテゴリ削除
+        categories.removeAll { it.sessionId == sessionId }
     }
 
     /**
@@ -271,8 +299,9 @@ class AppState {
             val userEntities = withContext(Dispatchers.IO) { db.userDao().getAll() }
             val recordEntities = withContext(Dispatchers.IO) { db.scoreDao().getAllRecords() }
             val items = withContext(Dispatchers.IO) { db.scoreDao().getAllItems() }
+            val categoryEntities = withContext(Dispatchers.IO) { db.categoryDao().getAll() }
 
-            sessions.clear(); users.clear(); scoreRecords.clear()
+            sessions.clear(); users.clear(); scoreRecords.clear(); categories.clear()
 
             sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
             users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
@@ -280,7 +309,19 @@ class AppState {
             val itemsByRecord = items.groupBy { it.recordId }
             scoreRecords.addAll(recordEntities.map { rec ->
                 val map = itemsByRecord[rec.id]?.associate { it.userId to it.delta } ?: emptyMap()
-                ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map)
+                ScoreRecord(id = rec.id, sessionId = rec.sessionId, timestamp = Date(rec.timestamp), scores = map, sectionId = rec.sectionId)
+            })
+
+            categories.addAll(categoryEntities.map {
+                Category(
+                    id = it.id,
+                    sessionId = it.sessionId,
+                    parentId = it.parentId,
+                    name = it.name,
+                    // valueOf は不正値で IllegalArgumentException を投げるため safe lookup を使用
+                    type = runCatching { CategoryType.valueOf(it.type) }.getOrDefault(CategoryType.FOLDER),
+                    sortOrder = it.sortOrder,
+                )
             })
 
             sessions.map { it.id }.forEach { recalcSessionTotals(it) }
@@ -358,11 +399,12 @@ class AppState {
      * @param recordId スコアレコードID
      * @param userScores ユーザースコアマップ
      * @param timestamp 記録時刻（ミリ秒）
+     * @param sectionId 紐づくセクションID（null=セクション未分類）
      */
-    suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long) {
+    suspend fun persistNewScoreRecord(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, recordId: Int, userScores: Map<Int, Int>, timestamp: Long, sectionId: Int? = null) {
         try {
             withContext(Dispatchers.IO) {
-                db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores)
+                db.scoreDao().insertRecordWithItems(sessionId, recordId, timestamp, userScores, sectionId)
             }
         } catch (e: Exception) {
             Log.e("AppState", "スコア記録保存エラー: ${e.message}", e)
@@ -491,6 +533,136 @@ class AppState {
             }
         } catch (e: Exception) {
             Log.e("AppState", "スコアレコードDB更新エラー: ${e.message}", e)
+        }
+    }
+
+    // =====================
+    // カテゴリ管理（メモリ操作）
+    // =====================
+
+    /**
+     * 指定親配下の直接子カテゴリ一覧を取得（sortOrder 順）
+     * @param sessionId セッションID
+     * @param parentId 親カテゴリID（null=ルート）
+     */
+    fun getChildCategories(sessionId: Int, parentId: Int?): List<Category> {
+        return categories
+            .filter { it.sessionId == sessionId && it.parentId == parentId }
+            .sortedWith(compareBy({ it.sortOrder }, { it.id }))
+    }
+
+    /**
+     * カテゴリを追加してメモリに反映
+     * @param sessionId セッションID
+     * @param parentId 親カテゴリID（null=ルート）
+     * @param name カテゴリ名
+     * @param type FOLDER または SECTION
+     * @return 作成されたカテゴリ
+     */
+    fun addCategory(sessionId: Int, parentId: Int?, name: String, type: CategoryType): Category {
+        val nextId = (categories.maxOfOrNull { it.id } ?: 0) + 1
+        val category = Category(nextId, sessionId, parentId, name, type)
+        categories.add(category)
+        return category
+    }
+
+    /**
+     * カテゴリをメモリから削除（子孫も含む再帰的削除）
+     * @param categoryId 削除対象カテゴリID
+     */
+    fun deleteCategoryLocal(categoryId: Int) {
+        // 子カテゴリを再帰的に削除
+        categories.filter { it.parentId == categoryId }.map { it.id }
+            .forEach { deleteCategoryLocal(it) }
+        categories.removeAll { it.id == categoryId }
+    }
+
+    /**
+     * カテゴリ名をメモリで更新
+     * @param categoryId 対象カテゴリID
+     * @param newName 新しいカテゴリ名
+     */
+    fun updateCategory(categoryId: Int, newName: String) {
+        val index = categories.indexOfFirst { it.id == categoryId }
+        if (index >= 0) categories[index] = categories[index].copy(name = newName)
+    }
+
+    /**
+     * カテゴリとその全子孫の ID を収集する（DB 削除用）
+     * deleteCategoryLocal の呼び出し前に実行すること
+     * @param categoryId 対象カテゴリID
+     * @return 対象カテゴリ + 全子孫の ID リスト
+     */
+    fun collectCategoryAndDescendantIds(categoryId: Int): List<Int> {
+        val result = mutableListOf<Int>()
+        fun collect(id: Int) {
+            result.add(id)
+            categories.filter { it.parentId == id }.forEach { collect(it.id) }
+        }
+        collect(categoryId)
+        return result
+    }
+
+    // =====================
+    // カテゴリ DB 永続化
+    // =====================
+
+    /**
+     * 新しいカテゴリをデータベースに保存
+     * @param db Room データベースインスタンス
+     * @param category 保存対象カテゴリ
+     * @return データベースで生成された ID
+     */
+    suspend fun persistNewCategory(db: com.example.testapp2.data.db.AppDatabase, category: Category): Int {
+        return try {
+            val newId = withContext(Dispatchers.IO) {
+                db.categoryDao().insert(
+                    com.example.testapp2.data.db.CategoryEntity(
+                        sessionId = category.sessionId,
+                        parentId = category.parentId,
+                        name = category.name,
+                        type = category.type.name,
+                        sortOrder = category.sortOrder,
+                    )
+                ).toInt()
+            }
+            val idx = categories.indexOfFirst { it === category }
+            if (idx >= 0) categories[idx] = category.copy(id = newId)
+            newId
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ保存エラー: ${e.message}", e)
+            category.id
+        }
+    }
+
+    /**
+     * カテゴリツリー（指定IDとその子孫）をデータベースから削除
+     * deleteCategoryLocal と collectCategoryAndDescendantIds と組み合わせて使用する
+     * @param db Room データベースインスタンス
+     * @param categoryIds 削除対象の全カテゴリ ID リスト
+     */
+    suspend fun persistDeleteCategoryTree(db: com.example.testapp2.data.db.AppDatabase, categoryIds: List<Int>) {
+        try {
+            withContext(Dispatchers.IO) {
+                // 1件ずつではなく一括削除でトランザクション安全に処理
+                db.categoryDao().deleteByIds(categoryIds)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリDB削除エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * カテゴリ名をデータベースで更新
+     * @param db Room データベースインスタンス
+     * @param categoryId 対象カテゴリID
+     * @param name 新しいカテゴリ名
+     */
+    suspend fun persistUpdateCategoryName(db: com.example.testapp2.data.db.AppDatabase, categoryId: Int, name: String) {
+        try {
+            withContext(Dispatchers.IO) { db.categoryDao().updateName(categoryId, name) }
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ名更新エラー: ${e.message}", e)
         }
     }
 }

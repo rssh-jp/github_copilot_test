@@ -65,11 +65,37 @@ interface ScoreDao {
     suspend fun deleteItemsByRecordId(recordId: Int)
 
     @Transaction
-    suspend fun insertRecordWithItems(sessionId: Int, recordId: Int, timestamp: Long, userDeltas: Map<Int, Int>) {
-        insertRecord(ScoreRecordEntity(id = recordId, sessionId = sessionId, timestamp = timestamp))
+    suspend fun insertRecordWithItems(sessionId: Int, recordId: Int, timestamp: Long, userDeltas: Map<Int, Int>, sectionId: Int? = null) {
+        insertRecord(ScoreRecordEntity(id = recordId, sessionId = sessionId, timestamp = timestamp, sectionId = sectionId))
         val items = userDeltas.map { (userId, delta) ->
             ScoreItemEntity(recordId = recordId, userId = userId, delta = delta)
         }
         insertItems(items)
     }
+}
+
+// カテゴリ（FOLDER/SECTION）の CRUD 操作
+@Dao
+interface CategoryDao {
+    @Insert
+    suspend fun insert(category: CategoryEntity): Long
+
+    @Query("SELECT * FROM categories")
+    suspend fun getAll(): List<CategoryEntity>
+
+    @Query("SELECT * FROM categories WHERE sessionId = :sessionId ORDER BY sortOrder, id")
+    suspend fun getAllBySession(sessionId: Int): List<CategoryEntity>
+
+    @Query("SELECT * FROM categories WHERE parentId = :parentId ORDER BY sortOrder, id")
+    suspend fun getByParentId(parentId: Int): List<CategoryEntity>
+
+    @Query("UPDATE categories SET name = :name WHERE id = :id")
+    suspend fun updateName(id: Int, name: String)
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    suspend fun deleteById(id: Int)
+
+    // 複数カテゴリを一括削除（トランザクション安全）
+    @Query("DELETE FROM categories WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Int>)
 }

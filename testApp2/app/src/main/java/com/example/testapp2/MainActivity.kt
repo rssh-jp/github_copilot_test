@@ -73,12 +73,41 @@ fun MainScreen() {
         currentScreen = Screen.SessionDetail(sessionId)
     }
 
+    // カテゴリブラウザ画面に移動
+    val navigateToCategoryBrowser: (Int, Int?) -> Unit = { sessionId, parentCategoryId ->
+        currentScreen = Screen.CategoryBrowser(sessionId, parentCategoryId)
+    }
+
+    // セッション実行画面に移動（sectionId 付き）
+    val navigateToSessionRunning: (Int, Int?) -> Unit = { sessionId, sectionId ->
+        currentScreen = Screen.SessionRunning(sessionId, sectionId)
+    }
+
     // システムの「戻る」ジェスチャー/ボタンをインターセプトしてアプリ内ナビゲーションに委譲
     BackHandler(enabled = currentScreen !is Screen.SessionList) {
         currentScreen = when (val screen = currentScreen) {
             is Screen.SessionDetail  -> Screen.SessionList
-            is Screen.SessionRunning -> Screen.SessionDetail(screen.sessionId)
-            is Screen.SessionList    -> Screen.SessionList // enabled=false でガード済みのため実質到達しない
+            is Screen.CategoryBrowser -> {
+                if (screen.parentCategoryId == null) {
+                    // ルートカテゴリ → セッション詳細へ
+                    Screen.SessionDetail(screen.sessionId)
+                } else {
+                    // 親カテゴリの parentId を求めて上階層の CategoryBrowser へ
+                    val parentCat = appState.categories.find { it.id == screen.parentCategoryId }
+                    Screen.CategoryBrowser(screen.sessionId, parentCat?.parentId)
+                }
+            }
+            is Screen.SessionRunning -> {
+                if (screen.sectionId != null) {
+                    // セクションの親カテゴリを持つ CategoryBrowser へ
+                    val section = appState.categories.find { it.id == screen.sectionId }
+                    Screen.CategoryBrowser(screen.sessionId, section?.parentId)
+                } else {
+                    // 後方互換: sectionId なし → SessionDetail へ
+                    Screen.SessionDetail(screen.sessionId)
+                }
+            }
+            is Screen.SessionList    -> Screen.SessionList
         }
     }
 
@@ -110,6 +139,15 @@ fun MainScreen() {
                                     val session = appState.sessions.find { it.id == sessionId }
                                     "セッション: ${session?.name ?: ""}"
                                 }
+                                is Screen.CategoryBrowser -> {
+                                    val screen = currentScreen as Screen.CategoryBrowser
+                                    if (screen.parentCategoryId == null) {
+                                        "カテゴリ"
+                                    } else {
+                                        val cat = appState.categories.find { it.id == screen.parentCategoryId }
+                                        cat?.name ?: "カテゴリ"
+                                    }
+                                }
                                 is Screen.SessionRunning -> {
                                     val sessionId = (currentScreen as Screen.SessionRunning).sessionId
                                     val session = appState.sessions.find { it.id == sessionId }
@@ -123,7 +161,7 @@ fun MainScreen() {
                             Icon(Icons.Filled.Menu, contentDescription = "メニューを開く")
                         }
                     },
-                    // セッション詳細画面/実行画面の場合は戻るボタンを表示
+                    // セッション詳細画面/実行画面/カテゴリブラウザの場合は戻るボタンを表示
                     actions = {
                         when (currentScreen) {
                             is Screen.SessionDetail -> {
@@ -133,10 +171,28 @@ fun MainScreen() {
                                     Text("戻る")
                                 }
                             }
-                            is Screen.SessionRunning -> {
-                                val sid = (currentScreen as Screen.SessionRunning).sessionId
+                            is Screen.CategoryBrowser -> {
+                                val screen = currentScreen as Screen.CategoryBrowser
                                 IconButton(onClick = {
-                                    currentScreen = Screen.SessionDetail(sid)
+                                    currentScreen = if (screen.parentCategoryId == null) {
+                                        Screen.SessionDetail(screen.sessionId)
+                                    } else {
+                                        val parentCat = appState.categories.find { it.id == screen.parentCategoryId }
+                                        Screen.CategoryBrowser(screen.sessionId, parentCat?.parentId)
+                                    }
+                                }) {
+                                    Text("戻る")
+                                }
+                            }
+                            is Screen.SessionRunning -> {
+                                val screen = currentScreen as Screen.SessionRunning
+                                IconButton(onClick = {
+                                    currentScreen = if (screen.sectionId != null) {
+                                        val section = appState.categories.find { it.id == screen.sectionId }
+                                        Screen.CategoryBrowser(screen.sessionId, section?.parentId)
+                                    } else {
+                                        Screen.SessionDetail(screen.sessionId)
+                                    }
                                 }) {
                                     Text("戻る")
                                 }
@@ -167,16 +223,30 @@ fun MainScreen() {
                         appState = appState,
                         db = db,
                         sessionId = sessionId,
-                        onStartSession = { sid -> currentScreen = Screen.SessionRunning(sid) }
+                        onStartSession = { sid -> navigateToSessionRunning(sid, null) },
+                        onManageCategories = { sid -> navigateToCategoryBrowser(sid, null) },
+                    )
+                }
+                is Screen.CategoryBrowser -> {
+                    val screen = currentScreen as Screen.CategoryBrowser
+                    CategoryBrowserScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        appState = appState,
+                        db = db,
+                        sessionId = screen.sessionId,
+                        parentCategoryId = screen.parentCategoryId,
+                        onNavigateToCategory = { sid, parentId -> navigateToCategoryBrowser(sid, parentId) },
+                        onNavigateToSection = { sid, sectionId -> navigateToSessionRunning(sid, sectionId) },
                     )
                 }
                 is Screen.SessionRunning -> {
-                    val sessionId = (currentScreen as Screen.SessionRunning).sessionId
+                    val screen = currentScreen as Screen.SessionRunning
                     SessionRunningScreen(
                         modifier = Modifier.padding(innerPadding),
                         appState = appState,
                         db = db,
-                        sessionId = sessionId
+                        sessionId = screen.sessionId,
+                        sectionId = screen.sectionId,
                     )
                 }
             }
