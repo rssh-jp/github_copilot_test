@@ -25,7 +25,9 @@ fun SessionDetailScreen(
     appState: AppState,
     db: com.example.testapp2.data.db.AppDatabase? = null,
     sessionId: Int,
-    onStartSession: (Int) -> Unit = {}
+    categoryId: Int? = null,
+    onStartSession: (Int) -> Unit = {},
+    onNavigateToSession: (Int) -> Unit = {}
 ) {
     // 新規セッションの場合（sessionId = -1）と既存セッションの場合を分ける
     val isNewSession = sessionId == -1
@@ -37,13 +39,12 @@ fun SessionDetailScreen(
     val tempUsers = remember { mutableStateListOf<String>() }
     val currentUsers = if (isNewSession) tempUsers else users
     
-    // コピー成功メッセージ用のSnackbar
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scopeSnackbar = rememberCoroutineScope()
     // ユーザー削除用のコルーチンスコープ
     val scopeUserDel = rememberCoroutineScope()
     // セッションコピー用のコルーチンスコープ
     val scopeCopy = rememberCoroutineScope()
+    // Snackbar ホスト（コピー失敗通知用）
+    val snackbarHostState = remember { SnackbarHostState() }
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -91,7 +92,7 @@ fun SessionDetailScreen(
                             if (isNewSession) {
                                 // 新規セッションの場合：セッションとユーザーを作成してDB登録
                                 if (sessionNameEditing.isNotBlank()) {
-                                    val newSession = appState.addSession(sessionNameEditing.trim())
+                                    val newSession = appState.addSession(sessionNameEditing.trim(), categoryId)
                                     // セッションIDの一時保存
                                     val tempSessionId = newSession.id
                                     
@@ -181,22 +182,22 @@ fun SessionDetailScreen(
                                 scopeCopy.launch {
                                     val copiedSession = appState.copySessionWithDb(db, sessionId, newName)
                                     if (copiedSession != null) {
-                                        scopeSnackbar.launch {
-                                            snackbarHostState.showSnackbar(
-                                                message = "新しいセッション「${copiedSession.name}」を作成しました",
-                                                duration = SnackbarDuration.Short
-                                            )
-                                        }
+                                        // コピー成功時はコピー先セッションの詳細画面へ遷移
+                                        onNavigateToSession(copiedSession.id)
+                                    } else {
+                                        // コピー失敗時はユーザーに通知
+                                        snackbarHostState.showSnackbar("セッションのコピーに失敗しました")
                                     }
                                 }
                             } else {
                                 val copiedSession = appState.copySession(sessionId, newName)
                                 if (copiedSession != null) {
-                                    scopeSnackbar.launch {
-                                        snackbarHostState.showSnackbar(
-                                            message = "新しいセッション「${copiedSession.name}」を作成しました",
-                                            duration = SnackbarDuration.Short
-                                        )
+                                    // コピー成功時はコピー先セッションの詳細画面へ遷移
+                                    onNavigateToSession(copiedSession.id)
+                                } else {
+                                    // DB なしのコピー失敗時もユーザーに通知
+                                    scopeCopy.launch {
+                                        snackbarHostState.showSnackbar("セッションのコピーに失敗しました")
                                     }
                                 }
                             }

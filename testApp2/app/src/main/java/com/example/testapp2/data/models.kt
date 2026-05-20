@@ -7,15 +7,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
+ * カテゴリ情報を表すデータクラス（ツリー構造）
+ * @param id カテゴリの一意識別子
+ * @param parentId 親カテゴリID（null = ルート直下）
+ * @param name カテゴリ名
+ * @param sortOrder 表示順序
+ */
+data class Category(
+    val id: Int,
+    val parentId: Int?,
+    val name: String,
+    val sortOrder: Int = 0,
+)
+
+/**
  * セッション情報を表すデータクラス
  * @param id セッションの一意識別子
  * @param name セッション名
  * @param elapsedTime セッション実行の累積経過時間（秒）
+ * @param categoryId 所属カテゴリID（null = ルート直下）
  */
 data class Session(
     val id: Int,
     val name: String,
     val elapsedTime: Int,
+    val categoryId: Int? = null,
 )
 
 /**
@@ -59,6 +75,119 @@ class AppState {
     val users = mutableStateListOf<User>()
     /** スコア登録履歴一覧（ゲームの記録） */
     val scoreRecords = mutableStateListOf<ScoreRecord>()
+    /** カテゴリ一覧（ツリー構造のセッション整理用） */
+    val categories = mutableStateListOf<Category>()
+
+    // =====================
+    // カテゴリ管理メソッド
+    // =====================
+
+    /**
+     * 指定親カテゴリIDの直下カテゴリ一覧を返す
+     * @param parentId 親カテゴリID（null = ルート直下）
+     */
+    fun getChildCategories(parentId: Int?): List<Category> {
+        return categories.filter { it.parentId == parentId }
+    }
+
+    /**
+     * 指定カテゴリIDに属するセッション一覧を返す
+     * @param categoryId カテゴリID（null = ルート直下）
+     */
+    fun getSessionsByCategory(categoryId: Int?): List<Session> {
+        return sessions.filter { it.categoryId == categoryId }
+    }
+
+    /**
+     * 新しいカテゴリをメモリに追加し返す
+     * @param parentId 親カテゴリID（null = ルート直下）
+     * @param name カテゴリ名
+     * @return 作成された Category
+     */
+    fun addCategory(parentId: Int?, name: String): Category {
+        val nextId = (categories.maxOfOrNull { it.id } ?: 0) + 1
+        val category = Category(nextId, parentId, name)
+        categories.add(category)
+        return category
+    }
+
+    /**
+     * カテゴリをメモリから削除（子カテゴリ・所属セッションも削除）
+     * @param categoryId 削除対象カテゴリID
+     */
+    fun deleteCategoryLocal(categoryId: Int) {
+        // 子カテゴリを削除（再帰的）
+        val children = categories.filter { it.parentId == categoryId }
+        children.forEach { child -> deleteCategoryLocal(child.id) }
+        // 所属セッションを削除
+        val categorySessions = sessions.filter { it.categoryId == categoryId }
+        categorySessions.forEach { session -> deleteSessionLocal(session.id) }
+        // カテゴリ自身を削除
+        categories.removeAll { it.id == categoryId }
+    }
+
+    /**
+     * 新しいカテゴリをデータベースに保存する
+     * @param db Room データベースインスタンス
+     * @param category 保存対象のカテゴリ
+     */
+    suspend fun persistNewCategory(db: com.example.testapp2.data.db.AppDatabase, category: Category) {
+        try {
+            val newId = withContext(Dispatchers.IO) {
+                db.categoryDao().insert(
+                    com.example.testapp2.data.db.CategoryEntity(
+                        parentId = category.parentId,
+                        name = category.name,
+                        sortOrder = category.sortOrder,
+                    )
+                ).toInt()
+            }
+            // 生成されたIDをメモリに反映
+            val idx = categories.indexOfFirst { it === category }
+            if (idx >= 0) categories[idx] = category.copy(id = newId)
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ保存エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * カテゴリをデータベースから再帰削除（子カテゴリ・所属セッションも含む）
+     * CategoryEntity に自己参照 FK カスケードが未設定のため、アプリ側で再帰削除を管理する
+     * @param db Room データベースインスタンス
+     * @param categoryId 削除対象カテゴリID
+     */
+    suspend fun persistDeleteCategory(db: com.example.testapp2.data.db.AppDatabase, categoryId: Int) {
+        try {
+            withContext(Dispatchers.IO) {
+                deleteCategoryFromDbRecursive(db, categoryId)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ削除エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * DB からカテゴリを再帰削除する内部メソッド（IO スレッドで呼ぶこと）
+     * 子カテゴリ → 所属セッション → カテゴリ自身の順に削除する
+     * @param db Room データベースインスタンス
+     * @param categoryId 削除対象カテゴリID
+     */
+    private suspend fun deleteCategoryFromDbRecursive(
+        db: com.example.testapp2.data.db.AppDatabase,
+        categoryId: Int,
+    ) {
+        // 子カテゴリを再帰削除
+        val children = db.categoryDao().getByParent(categoryId)
+        for (child in children) {
+            deleteCategoryFromDbRecursive(db, child.id)
+        }
+        // 所属セッションを削除（SessionEntity に FK 制約がないため手動削除）
+        db.sessionDao().getByCategory(categoryId).forEach { session ->
+            db.sessionDao().deleteById(session.id)
+        }
+        // カテゴリ自身を削除
+        db.categoryDao().deleteById(categoryId)
+    }
 
     // =====================
     // 基本的なデータ取得メソッド
@@ -107,11 +236,12 @@ class AppState {
     /**
      * 新しいセッションを追加
      * @param name セッション名
+     * @param categoryId 所属カテゴリID（null = ルート直下）
      * @return 作成されたセッションオブジェクト
      */
-    fun addSession(name: String): Session {
+    fun addSession(name: String, categoryId: Int? = null): Session {
         val nextId = (sessions.maxOfOrNull { it.id } ?: 0) + 1
-        val session = Session(nextId, name, 0)
+        val session = Session(nextId, name, 0, categoryId)
         sessions.add(session)
         return session
     }
@@ -126,8 +256,8 @@ class AppState {
         val sourceSession = sessions.find { it.id == sourceSessionId } ?: return null
         val sourceUsers = getSessionUsers(sourceSessionId)
         
-        // 新しいセッションを作成
-        val newSession = addSession(newName)
+        // 新しいセッションを作成（コピー元のカテゴリIDを引き継ぐ）
+        val newSession = addSession(newName, sourceSession.categoryId)
         
         // ユーザーをコピー（スコアは0で初期化）
         sourceUsers.forEach { user ->
@@ -272,9 +402,9 @@ class AppState {
             val recordEntities = withContext(Dispatchers.IO) { db.scoreDao().getAllRecords() }
             val items = withContext(Dispatchers.IO) { db.scoreDao().getAllItems() }
 
-            sessions.clear(); users.clear(); scoreRecords.clear()
+            sessions.clear(); users.clear(); scoreRecords.clear(); categories.clear()
 
-            sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime) })
+            sessions.addAll(sessionEntities.map { Session(it.id, it.name, it.elapsedTime, it.categoryId) })
             users.addAll(userEntities.map { com.example.testapp2.data.User(it.id, it.sessionId, it.name, it.score) })
 
             val itemsByRecord = items.groupBy { it.recordId }
@@ -284,6 +414,10 @@ class AppState {
             })
 
             sessions.map { it.id }.forEach { recalcSessionTotals(it) }
+
+            // カテゴリをロード
+            val categoryEntities = withContext(Dispatchers.IO) { db.categoryDao().getAll() }
+            categories.addAll(categoryEntities.map { Category(it.id, it.parentId, it.name, it.sortOrder) })
         } catch (e: Exception) {
             Log.e("AppState", "DB読み込みエラー: ${e.message}", e)
         }
@@ -299,7 +433,11 @@ class AppState {
         return try {
             val newId = withContext(Dispatchers.IO) {
                 db.sessionDao().insert(
-                    com.example.testapp2.data.db.SessionEntity(name = session.name, elapsedTime = session.elapsedTime)
+                    com.example.testapp2.data.db.SessionEntity(
+                        name = session.name,
+                        elapsedTime = session.elapsedTime,
+                        categoryId = session.categoryId,
+                    )
                 ).toInt()
             }
             // 生成IDをメモリに反映
@@ -321,14 +459,22 @@ class AppState {
      */
     suspend fun copySessionWithDb(db: com.example.testapp2.data.db.AppDatabase, sourceSessionId: Int, newName: String): Session? {
         val newSession = copySession(sourceSessionId, newName) ?: return null
-        
-        // データベースに保存
+        // persistNewSession 呼び出し後に sessions リスト上のIDが更新されるため、
+        // 先に一時IDを保存してユーザー検索に使う
+        val tempSessionId = newSession.id
+
+        // セッションをDBに保存（sessions[idx].id が DB 生成 ID に更新される）
         val dbSessionId = persistNewSession(db, newSession)
-        val newUsers = getSessionUsers(newSession.id)
-        newUsers.forEach { user ->
-            persistNewUser(db, user)
+
+        // ユーザーの sessionId を DB 生成 ID に更新してから保存
+        users.filter { it.sessionId == tempSessionId }.toList().forEach { user ->
+            val idx = users.indexOfFirst { it === user }
+            if (idx >= 0) {
+                users[idx] = users[idx].copy(sessionId = dbSessionId)
+                persistNewUser(db, users[idx])
+            }
         }
-        
+
         return sessions.find { it.id == dbSessionId }
     }
 
@@ -491,6 +637,89 @@ class AppState {
             }
         } catch (e: Exception) {
             Log.e("AppState", "スコアレコードDB更新エラー: ${e.message}", e)
+        }
+    }
+
+    // =====================
+    // ドラッグ＆ドロップ移動
+    // =====================
+
+    /**
+     * セッションを別カテゴリに移動（メモリ上のみ）
+     * @param sessionId 移動対象のセッションID
+     * @param newCategoryId 移動先カテゴリID（null = ルート直下）
+     */
+    fun moveSession(sessionId: Int, newCategoryId: Int?) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx >= 0) {
+            sessions[idx] = sessions[idx].copy(categoryId = newCategoryId)
+        }
+    }
+
+    /**
+     * セッション移動をDBに永続化
+     * @param db Room データベースインスタンス
+     * @param sessionId 移動対象のセッションID
+     * @param newCategoryId 移動先カテゴリID（null = ルート直下）
+     */
+    suspend fun persistMoveSession(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, newCategoryId: Int?) {
+        try {
+            withContext(Dispatchers.IO) {
+                db.sessionDao().updateCategoryId(sessionId, newCategoryId)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "セッション移動DB更新エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 指定カテゴリIDが対象カテゴリの子孫かどうかを判定（循環参照防止）
+     * @param targetId 判定対象カテゴリID
+     * @param potentialAncestorId 祖先候補のカテゴリID
+     * @return 祖先候補が対象の祖先に含まれる場合 true
+     */
+    fun isDescendant(targetId: Int, potentialAncestorId: Int): Boolean {
+        val visited = mutableSetOf<Int>()
+        var current: Int? = targetId
+        while (current != null) {
+            if (current == potentialAncestorId) return true
+            if (!visited.add(current)) break // 循環参照ガード
+            current = categories.find { it.id == current }?.parentId
+        }
+        return false
+    }
+
+    /**
+     * カテゴリを別カテゴリに移動（メモリ上のみ）。循環参照の場合は false を返す。
+     * @param categoryId 移動対象カテゴリID
+     * @param newParentId 移動先の親カテゴリID（null = ルート直下）
+     * @return 移動成功時 true、循環参照など禁止操作時 false
+     */
+    fun moveCategory(categoryId: Int, newParentId: Int?): Boolean {
+        // 自分自身への移動は禁止
+        if (newParentId == categoryId) return false
+        // 移動先が自分の子孫への移動は禁止（循環参照防止）
+        if (newParentId != null && isDescendant(newParentId, categoryId)) return false
+        val idx = categories.indexOfFirst { it.id == categoryId }
+        if (idx >= 0) {
+            categories[idx] = categories[idx].copy(parentId = newParentId)
+        }
+        return true
+    }
+
+    /**
+     * カテゴリ移動をDBに永続化
+     * @param db Room データベースインスタンス
+     * @param categoryId 移動対象カテゴリID
+     * @param newParentId 移動先の親カテゴリID（null = ルート直下）
+     */
+    suspend fun persistMoveCategory(db: com.example.testapp2.data.db.AppDatabase, categoryId: Int, newParentId: Int?) {
+        try {
+            withContext(Dispatchers.IO) {
+                db.categoryDao().updateParentId(categoryId, newParentId)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ移動DB更新エラー: ${e.message}", e)
         }
     }
 }

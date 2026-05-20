@@ -10,6 +10,7 @@ data class SessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val elapsedTime: Int,
+    val categoryId: Int? = null, // 所属カテゴリID（null = ルート直下）
 )
 
 @Entity(
@@ -66,4 +67,19 @@ data class ScoreItemEntity(
     val recordId: Int,
     val userId: Int,
     val delta: Int,
+)
+
+/**
+ * カテゴリエンティティ（ツリー構造でセッションを整理するためのカテゴリ）
+ * parentId が null の場合はルートカテゴリ
+ */
+@Entity(
+    tableName = "categories",
+    indices = [Index(value = ["parentId"])],
+)
+data class CategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val parentId: Int?,        // null = ルート直下
+    val name: String,
+    val sortOrder: Int = 0,
 )

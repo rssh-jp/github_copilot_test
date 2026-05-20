@@ -1,8 +1,8 @@
 import java.util.Properties
 
 // CI では VERSION_CODE 環境変数を使用。ローカルではフォールバック値を使用。
-val appVersionCode: Int = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 5
-val appVersionName: String = "1.3"
+val appVersionCode: Int = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 8
+val appVersionName: String = "1.6"
 
 plugins {
     alias(libs.plugins.android.application)
@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.androidx.material.icons.extended)
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
