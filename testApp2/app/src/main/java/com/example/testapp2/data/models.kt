@@ -256,8 +256,8 @@ class AppState {
         val sourceSession = sessions.find { it.id == sourceSessionId } ?: return null
         val sourceUsers = getSessionUsers(sourceSessionId)
         
-        // 新しいセッションを作成
-        val newSession = addSession(newName)
+        // 新しいセッションを作成（コピー元のカテゴリIDを引き継ぐ）
+        val newSession = addSession(newName, sourceSession.categoryId)
         
         // ユーザーをコピー（スコアは0で初期化）
         sourceUsers.forEach { user ->
@@ -459,14 +459,22 @@ class AppState {
      */
     suspend fun copySessionWithDb(db: com.example.testapp2.data.db.AppDatabase, sourceSessionId: Int, newName: String): Session? {
         val newSession = copySession(sourceSessionId, newName) ?: return null
-        
-        // データベースに保存
+        // persistNewSession 呼び出し後に sessions リスト上のIDが更新されるため、
+        // 先に一時IDを保存してユーザー検索に使う
+        val tempSessionId = newSession.id
+
+        // セッションをDBに保存（sessions[idx].id が DB 生成 ID に更新される）
         val dbSessionId = persistNewSession(db, newSession)
-        val newUsers = getSessionUsers(newSession.id)
-        newUsers.forEach { user ->
-            persistNewUser(db, user)
+
+        // ユーザーの sessionId を DB 生成 ID に更新してから保存
+        users.filter { it.sessionId == tempSessionId }.toList().forEach { user ->
+            val idx = users.indexOfFirst { it === user }
+            if (idx >= 0) {
+                users[idx] = users[idx].copy(sessionId = dbSessionId)
+                persistNewUser(db, users[idx])
+            }
         }
-        
+
         return sessions.find { it.id == dbSessionId }
     }
 
@@ -629,6 +637,89 @@ class AppState {
             }
         } catch (e: Exception) {
             Log.e("AppState", "スコアレコードDB更新エラー: ${e.message}", e)
+        }
+    }
+
+    // =====================
+    // ドラッグ＆ドロップ移動
+    // =====================
+
+    /**
+     * セッションを別カテゴリに移動（メモリ上のみ）
+     * @param sessionId 移動対象のセッションID
+     * @param newCategoryId 移動先カテゴリID（null = ルート直下）
+     */
+    fun moveSession(sessionId: Int, newCategoryId: Int?) {
+        val idx = sessions.indexOfFirst { it.id == sessionId }
+        if (idx >= 0) {
+            sessions[idx] = sessions[idx].copy(categoryId = newCategoryId)
+        }
+    }
+
+    /**
+     * セッション移動をDBに永続化
+     * @param db Room データベースインスタンス
+     * @param sessionId 移動対象のセッションID
+     * @param newCategoryId 移動先カテゴリID（null = ルート直下）
+     */
+    suspend fun persistMoveSession(db: com.example.testapp2.data.db.AppDatabase, sessionId: Int, newCategoryId: Int?) {
+        try {
+            withContext(Dispatchers.IO) {
+                db.sessionDao().updateCategoryId(sessionId, newCategoryId)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "セッション移動DB更新エラー: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 指定カテゴリIDが対象カテゴリの子孫かどうかを判定（循環参照防止）
+     * @param targetId 判定対象カテゴリID
+     * @param potentialAncestorId 祖先候補のカテゴリID
+     * @return 祖先候補が対象の祖先に含まれる場合 true
+     */
+    fun isDescendant(targetId: Int, potentialAncestorId: Int): Boolean {
+        val visited = mutableSetOf<Int>()
+        var current: Int? = targetId
+        while (current != null) {
+            if (current == potentialAncestorId) return true
+            if (!visited.add(current)) break // 循環参照ガード
+            current = categories.find { it.id == current }?.parentId
+        }
+        return false
+    }
+
+    /**
+     * カテゴリを別カテゴリに移動（メモリ上のみ）。循環参照の場合は false を返す。
+     * @param categoryId 移動対象カテゴリID
+     * @param newParentId 移動先の親カテゴリID（null = ルート直下）
+     * @return 移動成功時 true、循環参照など禁止操作時 false
+     */
+    fun moveCategory(categoryId: Int, newParentId: Int?): Boolean {
+        // 自分自身への移動は禁止
+        if (newParentId == categoryId) return false
+        // 移動先が自分の子孫への移動は禁止（循環参照防止）
+        if (newParentId != null && isDescendant(newParentId, categoryId)) return false
+        val idx = categories.indexOfFirst { it.id == categoryId }
+        if (idx >= 0) {
+            categories[idx] = categories[idx].copy(parentId = newParentId)
+        }
+        return true
+    }
+
+    /**
+     * カテゴリ移動をDBに永続化
+     * @param db Room データベースインスタンス
+     * @param categoryId 移動対象カテゴリID
+     * @param newParentId 移動先の親カテゴリID（null = ルート直下）
+     */
+    suspend fun persistMoveCategory(db: com.example.testapp2.data.db.AppDatabase, categoryId: Int, newParentId: Int?) {
+        try {
+            withContext(Dispatchers.IO) {
+                db.categoryDao().updateParentId(categoryId, newParentId)
+            }
+        } catch (e: Exception) {
+            Log.e("AppState", "カテゴリ移動DB更新エラー: ${e.message}", e)
         }
     }
 }
