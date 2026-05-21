@@ -55,8 +55,18 @@ fun MainScreen() {
     // 現在の画面状態 - 初期値をカテゴリブラウザ（ルート）に設定
     var currentScreen by remember { mutableStateOf<Screen>(Screen.CategoryBrowser(null)) }
 
-    // 展開中のカテゴリIDセット（ドロワーを閉じても状態を維持する）
+    // 展開中のカテゴリIDセット（初期値は空、LaunchedEffect で新規追加分のみ展開に追加）
     var expandedCategoryIds by remember { mutableStateOf(setOf<Int>()) }
+    // 前回のカテゴリIDセットを追跡（新規追加分の差分計算に使用）
+    var prevCategoryIds by remember { mutableStateOf(setOf<Int>()) }
+
+    // カテゴリが変化したとき、新規追加分のIDのみ展開に追加（ユーザーの折りたたみ操作はリセットしない）
+    val currentCategoryIds = appState.categories.map { it.id }.toSet()
+    LaunchedEffect(currentCategoryIds) {
+        val addedIds = currentCategoryIds - prevCategoryIds
+        expandedCategoryIds = expandedCategoryIds + addedIds
+        prevCategoryIds = currentCategoryIds
+    }
 
     // 現在表示中のカテゴリID（CategoryBrowser 画面以外は null）
     val selectedCategoryId: Int? = when (val s = currentScreen) {

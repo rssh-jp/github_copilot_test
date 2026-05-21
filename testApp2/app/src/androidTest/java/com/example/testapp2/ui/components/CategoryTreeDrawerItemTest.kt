@@ -26,6 +26,9 @@ import org.junit.runner.RunWith
  *  7. カテゴリ名をタップすると onCategoryClick コールバックが呼ばれる
  *  8. 選択中カテゴリが selected=true（ハイライト）で表示される
  *  9. 非選択カテゴリが selected=false で表示される
+ * 10. 全カテゴリIDを展開済みとして渡すと子カテゴリが初期状態から表示される
+ * 11. 複数の親カテゴリが全展開済みのとき全ての子カテゴリが初期状態から表示される
+ * 12. 多階層カテゴリで全展開済みのとき全レベルのカテゴリが初期状態から表示される
  */
 @RunWith(AndroidJUnit4::class)
 class CategoryTreeDrawerItemTest {
@@ -306,5 +309,97 @@ class CategoryTreeDrawerItemTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
         composeTestRule.onNodeWithText("カテゴリB")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, false))
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // テスト観点 10: 初期展開済みの expandedCategoryIds を渡すと子カテゴリが最初から表示される
+    //   （MainActivity.kt の LaunchedEffect で全カテゴリIDが expandedCategoryIds に追加されることに対応）
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun 全カテゴリIDを展開済みとして渡すと子カテゴリが初期状態から表示される() {
+        val categories = listOf(
+            Category(id = 1, parentId = null, name = "親カテゴリ"),
+            Category(id = 2, parentId = 1, name = "子カテゴリ"),
+        )
+        // MainActivity の変更後の初期値と同様に、全カテゴリIDのセットを渡す
+        val allIds = categories.map { it.id }.toSet()
+
+        composeTestRule.setContent {
+            CategoryTreeDrawerContent(
+                appState = buildAppState(categories),
+                selectedCategoryId = null,
+                expandedCategoryIds = allIds,
+                onCategoryClick = {},
+                onToggleExpand = {},
+            )
+        }
+
+        // タップ操作なしで最初から子カテゴリが表示されていること
+        composeTestRule.onNodeWithText("子カテゴリ").assertIsDisplayed()
+        // 展開中を示す▼アイコンが表示されていること
+        composeTestRule.onNodeWithText("▼").assertIsDisplayed()
+        // 折りたたみ状態の▶アイコンは表示されないこと
+        composeTestRule.onNodeWithText("▶").assertDoesNotExist()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // テスト観点 11: 複数の親カテゴリが全展開済みのとき全ての子カテゴリが初期状態から表示される
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun 複数の親カテゴリが全展開済みのとき全ての子カテゴリが初期状態から表示される() {
+        val categories = listOf(
+            Category(id = 1, parentId = null, name = "親カテゴリA"),
+            Category(id = 2, parentId = 1, name = "子カテゴリA1"),
+            Category(id = 3, parentId = null, name = "親カテゴリB"),
+            Category(id = 4, parentId = 3, name = "子カテゴリB1"),
+        )
+        val allIds = categories.map { it.id }.toSet()
+
+        composeTestRule.setContent {
+            CategoryTreeDrawerContent(
+                appState = buildAppState(categories),
+                selectedCategoryId = null,
+                expandedCategoryIds = allIds,
+                onCategoryClick = {},
+                onToggleExpand = {},
+            )
+        }
+
+        // 全ての親・子カテゴリがタップなしで最初から表示されていること
+        composeTestRule.onNodeWithText("親カテゴリA").assertIsDisplayed()
+        composeTestRule.onNodeWithText("子カテゴリA1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("親カテゴリB").assertIsDisplayed()
+        composeTestRule.onNodeWithText("子カテゴリB1").assertIsDisplayed()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // テスト観点 12: 多階層カテゴリで全展開済みのとき全レベルのカテゴリが初期状態から表示される
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun 多階層カテゴリで全展開済みのとき全レベルのカテゴリが初期状態から表示される() {
+        val categories = listOf(
+            Category(id = 1, parentId = null, name = "祖父カテゴリ"),
+            Category(id = 2, parentId = 1, name = "親カテゴリ"),
+            Category(id = 3, parentId = 2, name = "孫カテゴリ"),
+        )
+        val allIds = categories.map { it.id }.toSet()
+
+        composeTestRule.setContent {
+            CategoryTreeDrawerContent(
+                appState = buildAppState(categories),
+                selectedCategoryId = null,
+                expandedCategoryIds = allIds,
+                onCategoryClick = {},
+                onToggleExpand = {},
+            )
+        }
+
+        // 3階層全てがタップなしで最初から表示されていること
+        composeTestRule.onNodeWithText("祖父カテゴリ").assertIsDisplayed()
+        composeTestRule.onNodeWithText("親カテゴリ").assertIsDisplayed()
+        composeTestRule.onNodeWithText("孫カテゴリ").assertIsDisplayed()
     }
 }
