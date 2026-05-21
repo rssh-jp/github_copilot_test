@@ -15,8 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.example.testapp2.data.AppState
-import com.example.testapp2.data.MenuType
 import com.example.testapp2.data.Screen
+import com.example.testapp2.ui.components.CategoryTreeDrawerContent
 import com.example.testapp2.data.db.AppDatabase
 import com.example.testapp2.ui.screens.*
 import com.example.testapp2.ui.theme.TestApp2Theme
@@ -41,8 +41,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen() {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val menuItems = MenuType.values().toList()
-    
+
     // アプリケーション状態を作成・管理
     val appState = remember { AppState() }
     val context = LocalContext.current
@@ -55,19 +54,26 @@ fun MainScreen() {
     
     // 現在の画面状態 - 初期値をカテゴリブラウザ（ルート）に設定
     var currentScreen by remember { mutableStateOf<Screen>(Screen.CategoryBrowser(null)) }
-    
-    // 初期選択メニューもカテゴリブラウザに合わせる
-    var selectedMenu by remember { mutableStateOf(MenuType.CATEGORY_BROWSER) }
 
-    // メニュー選択時に画面状態を更新
-    val onMenuItemSelected: (MenuType) -> Unit = { menuType ->
-        selectedMenu = menuType
-        currentScreen = when (menuType) {
-            MenuType.CATEGORY_BROWSER -> Screen.CategoryBrowser(null)
-        }
-        scope.launch { drawerState.close() }
+    // 展開中のカテゴリIDセット（初期値は空、LaunchedEffect で新規追加分のみ展開に追加）
+    var expandedCategoryIds by remember { mutableStateOf(setOf<Int>()) }
+    // 前回のカテゴリIDセットを追跡（新規追加分の差分計算に使用）
+    var prevCategoryIds by remember { mutableStateOf(setOf<Int>()) }
+
+    // カテゴリが変化したとき、新規追加分のIDのみ展開に追加（ユーザーの折りたたみ操作はリセットしない）
+    val currentCategoryIds = appState.categories.map { it.id }.toSet()
+    LaunchedEffect(currentCategoryIds) {
+        val addedIds = currentCategoryIds - prevCategoryIds
+        expandedCategoryIds = expandedCategoryIds + addedIds
+        prevCategoryIds = currentCategoryIds
     }
-    
+
+    // 現在表示中のカテゴリID（CategoryBrowser 画面以外は null）
+    val selectedCategoryId: Int? = when (val s = currentScreen) {
+        is Screen.CategoryBrowser -> s.categoryId
+        else -> null
+    }
+
     // CategoryBrowserScreen から SessionDetail に遷移するコールバックは
     // CategoryBrowserScreen の onNavigateToSession から直接処理する
 
@@ -98,13 +104,21 @@ fun MainScreen() {
             ModalDrawerSheet {
                 Text("メニュー", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                 HorizontalDivider()
-                menuItems.forEach { menuType ->
-                    NavigationDrawerItem(
-                        label = { Text(menuType.title) },
-                        selected = selectedMenu == menuType,
-                        onClick = { onMenuItemSelected(menuType) }
-                    )
-                }
+                CategoryTreeDrawerContent(
+                    appState = appState,
+                    selectedCategoryId = selectedCategoryId,
+                    expandedCategoryIds = expandedCategoryIds,
+                    onCategoryClick = { category ->
+                        currentScreen = Screen.CategoryBrowser(category.id)
+                        scope.launch { drawerState.close() }
+                    },
+                    onToggleExpand = { id ->
+                        expandedCategoryIds = if (id in expandedCategoryIds)
+                            expandedCategoryIds - id
+                        else
+                            expandedCategoryIds + id
+                    }
+                )
             }
         }
     ) {
