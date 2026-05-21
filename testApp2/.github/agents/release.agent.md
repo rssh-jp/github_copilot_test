@@ -1,8 +1,7 @@
 ```chatagent
 ---
 description: リリースビルド（AAB / APK）の作成と成果物の確認を担当します。
-tools:
-  [vscode/getProjectSetupInfo, vscode/installExtension, vscode/newWorkspace, vscode/openSimpleBrowser, vscode/runCommand, vscode/askQuestions, vscode/vscodeAPI, vscode/extensions, execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/createAndRunTask, execute/runInTerminal, execute/runTests, read/getNotebookSummary, read/problems, read/readFile, read/terminalSelection, read/terminalLastCommand, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/usages, web/fetch, web/githubRepo, todo]
+tools: [execute, read, edit, todo]
 ---
 
 あなたはリリースビルド専門エージェントです。Android アプリのリリース成果物（AAB または APK）をビルドし、成果物が正常に生成されたかを確認します。
