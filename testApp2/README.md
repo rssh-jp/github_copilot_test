@@ -126,17 +126,36 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 
 ## Google Play へのリリース手順
 
-1. `app/build.gradle.kts` の `versionCode` を前回より大きい値に更新し、`versionName` も更新します。
-   > **CI 環境の場合**: `VERSION_CODE` 環境変数が設定されていれば、ファイルを直接編集しなくても環境変数の値が使用されます。
-2. キーストアと `keystore.properties` を準備します（上記リリースビルドの章を参照）。
-3. AAB を生成します。
+リリースは GitHub Actions による自動デプロイで行います。`v*.*.*` 形式のタグを push すると、以下のワークフローが自動実行されます。
 
-   ```powershell
-   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-   .\gradlew.bat bundleRelease
+1. Play Console から次の `versionCode` を自動取得
+2. 署名済み AAB をビルド
+3. Google Play の **内部テスト**トラックに自動アップロード
+
+### 前提条件
+
+以下の Secrets が GitHub リポジトリに設定されていること：
+
+| Secret 名 | 内容 |
+|-----------|------|
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Google Play サービスアカウントの JSON キー |
+| `KEYSTORE_BASE64` | キーストアファイルを Base64 エンコードしたもの |
+| `KEYSTORE_PASSWORD` | キーストアのパスワード |
+| `KEY_ALIAS` | キーのエイリアス |
+| `KEY_PASSWORD` | キーのパスワード |
+
+### リリース手順
+
+1. `app/build.gradle.kts` の `versionName` を更新してコミット・マージします（`versionCode` は CI が自動設定）。
+2. リリース用タグを作成して push します。
+
+   ```bash
+   git tag v1.7.0
+   git push origin v1.7.0
    ```
 
-4. [Google Play Console](https://play.google.com/console) にアクセスします。
-5. 対象アプリ → 「リリース」→「製品版」（または内部テスト等）→「新しいリリースを作成」を選択します。
-6. 生成した AAB（`app/build/outputs/bundle/release/app-release.aab`）をアップロードします。
-7. リリースノートを記入して審査に提出します。
+3. GitHub Actions の [Actions タブ](../../actions) でワークフロー「Deploy to Google Play Store」の実行を確認します。
+4. 正常完了後、[Google Play Console](https://play.google.com/console) の内部テストトラックに AAB がアップロードされていることを確認します。
+5. 内部テストで問題がなければ、Play Console 上で製品版などのトラックに昇格させます。
+
+> **注意**: タグは `v1.0.0` のような `v*.*.*` 形式で作成してください。形式が異なるとワークフローが起動しません。
